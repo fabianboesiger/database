@@ -4,4 +4,4 @@ description = "A simple database written in Rust."
 version = "0.1.0"
 authors = ["Fabian Bösiger <boefabia@student.ethz.ch>"]
 edition = "2018"
-licence = "MIT OR Apache-2.0"
+licence = "MIT"
