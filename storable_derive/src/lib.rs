@@ -13,7 +13,9 @@ pub fn storable_derive(input: TokenStream) -> TokenStream {
 }
 
 fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
+    // find struct name
     let struct_name = &ast.ident;
+    // find id name
     let id_name = match *&ast.data {
         Data::Struct(ref data) => {
             match data.fields {
@@ -28,6 +30,7 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                                 break;
                             }
                         };
+                        // if id attribute was found, we can return
                         if is_id {
                             id_name = Some(&field.ident);
                             break;
@@ -46,10 +49,12 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
         Data::Enum(_) | Data::Union(_) => unimplemented!()
     };
 
+    // currently, an id attribute has to exist
     if id_name == Option::None {
         panic!("Storable structs without id are not allowed");
     }
 
+    // generate implementation
     let gen = quote! {
         impl Storable for #struct_name {
             fn name() -> String {

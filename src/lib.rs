@@ -22,22 +22,14 @@ mod tests {
             }
         }
     }
-    /*
-    impl Storable for Person {
-        fn name() -> &'static str {
-            "person"
-        }
-
-        fn id<'a>(&self) -> &'a str {
-            self.name
-        }
-    }
-    */
+    
     #[test]
     fn crud_single_threaded() {
         let peter = Person::new("Peter", 25);
         let database = Database::new();
         database.create(&peter).expect("Database create failed");
+        database.read(&peter).expect("Database read failed");
         database.update(&peter).expect("Database update failed");
+        database.delete(&peter).expect("Database delete failed");
     }
 }
