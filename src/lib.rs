@@ -6,8 +6,11 @@ mod tests {
     use super::database::Database;
     use super::storable::Storable;
     use storable_derive::Storable;
+    use std::thread;
+    use std::sync::Arc;
+    use std::time::Instant;
 
-    #[derive(Storable)]
+    #[derive(Storable, PartialEq, Clone, Debug)]
     struct Person {
         #[id] name: &'static str,
         age: u16
@@ -22,14 +25,59 @@ mod tests {
             }
         }
     }
+
+    #[derive(Storable)]
+    struct Number {
+        #[id] id: u32
+    }
+
+    impl Number {
+        pub fn new(id: u32) -> Number {
+            Number {
+                id
+            }
+        }
+    }
     
     #[test]
-    fn crud_single_threaded() {
-        let peter = Person::new("Peter", 25);
+    fn crud_basics() {
         let database = Database::new();
-        database.create(&peter).expect("Database create failed");
-        database.read(&peter).expect("Database read failed");
-        database.update(&peter).expect("Database update failed");
-        database.delete(&peter).expect("Database delete failed");
+        let mut peter_original = Person::new("Peter", 25);
+        database.create(&peter_original).expect("Database create failed");
+        let mut peter_read = Person::new("Not Peter", 0);
+        database.read(&peter_read).expect("Database read failed");
+        assert_eq!(peter_read, peter_original);
+        peter_original.age = 42;
+        database.update(&peter_original).expect("Database update failed");
+        database.read(&peter_read).expect("Database read failed");
+        assert_eq!(peter_read, peter_original);
+        database.delete(&peter_original).expect("Database delete failed");
+    }
+    
+    #[test]
+    fn crud_thread_times() {
+        let database = Arc::new(Database::new());
+        for i in 0..4 {
+            let amount = (2 as u32).pow(i);
+            let repetitions = 128 as u32 / amount;
+            let start = Instant::now();
+            let mut join_handles = Vec::new();
+            for j in 0..amount {
+                let db = Arc::clone(&database);
+                join_handles.push(thread::spawn(move || {
+                    for k in 0..repetitions {
+                        let number = Number::new(j as u32 * repetitions + k as u32);
+                        db.create(&number).expect("Database create failed");
+                        db.read(&number).expect("Database read failed");
+                        db.update(&number).expect("Database update failed");
+                        db.delete(&number).expect("Database delete failed");
+                    }
+                }));
+            }
+            for join_handle in join_handles {
+                join_handle.join().unwrap();
+            }
+            println!("{} threads: {} ms", amount, start.elapsed().as_millis());
+        }
     }
 }

@@ -5,6 +5,7 @@ use quote::quote;
 use syn;
 use syn::Data;
 use syn::Fields;
+use syn::Type;
 
 #[proc_macro_derive(Storable, attributes(id))]
 pub fn storable_derive(input: TokenStream) -> TokenStream {
@@ -26,6 +27,9 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                         let mut is_id = false;
                         for attribute in &field.attrs {
                             if attribute.path.is_ident("id") {
+                                if is_id {
+                                    panic!("The id attribute can only be defined once");
+                                }
                                 is_id = true;
                                 break;
                             }
@@ -33,17 +37,18 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                         // if id attribute was found, we can return
                         if is_id {
                             id_name = Some(&field.ident);
-                            break;
+                        }
+                        // get type
+                        if let Type::Path(tp) = &field.ty {
+                            if tp.path.is_ident("u8") {
+
+                            }
                         }
                     }
                     id_name
                 },
-                Fields::Unnamed(ref fields) => {
-                    Option::None
-                },
-                Fields::Unit => {
-                    Option::None
-                }
+                Fields::Unnamed(ref fields) => unimplemented!(),
+                Fields::Unit => unimplemented!()
             }
         },
         Data::Enum(_) | Data::Union(_) => unimplemented!()
@@ -58,7 +63,7 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
     let gen = quote! {
         impl Storable for #struct_name {
             fn name() -> String {
-                format!("{}s", stringify!(#struct_name).to_lowercase())
+                format!("{}", stringify!(#struct_name).to_lowercase())
             }
     
             fn id(&self) -> String {
@@ -67,6 +72,14 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
 
             fn key(&self) -> String {
                 format!("{}/{}", #struct_name::name(), self.id())
+            }
+
+            fn from_bin(&self, input: Vec<u8>) {
+
+            }
+
+            fn to_bin(&self) -> Vec<u8> {
+                Vec::new()
             }
         }
     };

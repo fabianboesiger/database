@@ -9,14 +9,36 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Condvar;
 use std::collections::HashMap;
+use std::time::SystemTime;
 
 enum Operation {
     Write,
     Read(u32)
 }
 
+type Pairs = HashMap<String, String>;
+
+enum Method {
+    Create(SystemTime, String, String, Pairs),
+    Read(SystemTime, String, String),
+    Update(SystemTime, String, String, Pairs),
+    Delete(SystemTime, String, String)
+}
+
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &*self {
+            Method::Create(t, n, k, p) => write!(f, "{} create {} {} {:?}", t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos(), n, k, p),
+            Method::Read(t, n, k) => write!(f, "{} read {} {}", t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos(), n, k),
+            Method::Update(t, n, k, p) => write!(f, "{} update {} {} {:?}", t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos(), n, k, p),
+            Method::Delete(t, n, k) => write!(f, "{} delete {} {}", t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos(), n, k)
+        }
+    }
+}
+
 pub struct Database {
-    blocked: Arc<(Mutex<HashMap<String, Operation>>, Condvar)>
+    blocked: Arc<(Mutex<HashMap<String, Operation>>, Condvar)>,
+    log: Mutex<File>
 }
 
 #[derive(Debug)]
@@ -43,12 +65,25 @@ impl std::error::Error for Error {
 
 impl Database {
     pub fn new() -> Database {
+        let directory_string = "data";
+        let directory = Path::new(directory_string);
+        if !directory.exists() {
+            fs::create_dir_all(directory).expect("Data directory could not be created");
+        }
+
         Database {
-            blocked: Arc::new((Mutex::new(HashMap::new()), Condvar::new()))
+            blocked: Arc::new((Mutex::new(HashMap::new()), Condvar::new())),
+            log: Mutex::new(
+                OpenOptions::new()
+                    .append(true)
+                    .create(true)
+                    .open("data/log.txt")
+                    .expect("Could not open log file")
+            )
         }
     }
 
-    pub fn create<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn create<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key();
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -69,7 +104,8 @@ impl Database {
             return Err(Box::new(Error::new()));
         }
 
-        // do the save
+        // do the create
+        self.append_log(Method::Create(SystemTime::now(), T::name(), object.id(), HashMap::new()));
         let directory_string = format!("data/{}", T::name());
         let directory = Path::new(&directory_string);
         if !directory.exists() {
@@ -120,6 +156,7 @@ impl Database {
         }
 
         // do the read
+        self.append_log(Method::Read(SystemTime::now(), T::name(), object.id()));
         let file = File::open(path)?;
 
         // acquire lock again and decrease readers
@@ -127,9 +164,9 @@ impl Database {
         let updated_readers = match (*guard).get(&key) {
             Some(operation) => match operation {
                 Operation::Read(r) => *r,
-                Operation::Write => panic!("This should never happen")
+                Operation::Write => panic!("Operation is write but was reading")
             },
-            None => panic!("This should never happen")
+            None => panic!("Key not found but should be there")
         } - 1;
         if updated_readers == 0 {
             guard.remove(&key);
@@ -164,6 +201,7 @@ impl Database {
         }
 
         // do the update
+        self.append_log(Method::Update(SystemTime::now(), T::name(), object.id(), HashMap::new()));
         let mut file = OpenOptions::new().write(true).open(path)?;
         file.write_all(b"It worked again!")?;
         drop(file);
@@ -199,6 +237,7 @@ impl Database {
         }
 
         // do the delete
+        self.append_log(Method::Delete(SystemTime::now(), T::name(), object.id()));
         fs::remove_file(path)?;
 
         // acquire lock again and remove key from blocked list
@@ -208,5 +247,9 @@ impl Database {
         condvar.notify_all();
 
         Ok(())
+    }
+
+    fn append_log(&self, method: Method) {
+        writeln!(self.log.lock().unwrap(), "{}", method).unwrap();
     }
 }
