@@ -60,7 +60,9 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {
-
+    fn description(&self) -> &str {
+        "description"
+    }
 }
 
 impl Database {
@@ -101,7 +103,7 @@ impl Database {
 
         // return error if file exists
         if path.exists() {
-            return Err(Box::new(Error::new()));
+            return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
         }
 
         // do the create
@@ -124,7 +126,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn read<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn read<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key();
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -152,7 +154,7 @@ impl Database {
 
         // return error if file doesn't exist
         if !path.exists() {
-            return Err(Box::new(Error::new()));
+            return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
         }
 
         // do the read
@@ -179,7 +181,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn update<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn update<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key();
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -197,7 +199,7 @@ impl Database {
 
         // return error if file doesn't exist
         if !path.exists() {
-            return Err(Box::new(Error::new()));
+            return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
         }
 
         // do the update
@@ -215,7 +217,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn delete<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn delete<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key();
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -233,7 +235,7 @@ impl Database {
 
         // return error if file doesn't exist
         if !path.exists() {
-            return Err(Box::new(Error::new()));
+            return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
         }
 
         // do the delete
@@ -250,6 +252,6 @@ impl Database {
     }
 
     fn append_log(&self, method: Method) {
-        writeln!(self.log.lock().unwrap(), "{}", method).unwrap();
+        // writeln!(self.log.lock().unwrap(), "{}", method).unwrap();
     }
 }

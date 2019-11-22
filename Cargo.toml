@@ -8,3 +8,4 @@ licence = "MIT"
 
 [dependencies]
 storable_derive = { path = "storable_derive" }
+futures = "0.3"
