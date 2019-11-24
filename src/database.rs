@@ -5,17 +5,17 @@ use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
-use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Condvar;
 use std::collections::HashMap;
-use std::time::SystemTime;
+// use std::time::SystemTime;
 
 enum Operation {
     Write,
     Read(u32)
 }
 
+/*
 type Pairs = HashMap<String, String>;
 
 enum Method {
@@ -35,10 +35,12 @@ impl fmt::Display for Method {
         }
     }
 }
+*/
 
 pub struct Database {
-    blocked: Arc<(Mutex<HashMap<String, Operation>>, Condvar)>,
+    blocked: (Mutex<HashMap<String, Operation>>, Condvar)/*,
     log: Mutex<File>
+    */
 }
 
 #[derive(Debug)]
@@ -67,31 +69,32 @@ impl std::error::Error for Error {
 
 impl Database {
     pub fn new() -> Database {
+        /*
         let directory_string = "data";
         let directory = Path::new(directory_string);
         if !directory.exists() {
             fs::create_dir_all(directory).expect("Data directory could not be created");
         }
-
+        */
         Database {
-            blocked: Arc::new((Mutex::new(HashMap::new()), Condvar::new())),
+            blocked: (Mutex::new(HashMap::new()), Condvar::new())/*,
             log: Mutex::new(
                 OpenOptions::new()
                     .append(true)
                     .create(true)
                     .open("data/log.txt")
                     .expect("Could not open log file")
-            )
+            )*/
         }
     }
 
-    pub async fn create<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn create<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key();
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
 
         // acquire lock
-        let (lock, condvar) = &*self.blocked;
+        let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
         // wait while key is blocked
         while (*guard).get(&key).is_some() {
@@ -107,14 +110,14 @@ impl Database {
         }
 
         // do the create
-        self.append_log(Method::Create(SystemTime::now(), T::name(), object.id(), HashMap::new()));
+        // self.append_log(Method::Create(SystemTime::now(), T::name(), object.id(), HashMap::new()));
         let directory_string = format!("data/{}", T::name());
         let directory = Path::new(&directory_string);
         if !directory.exists() {
             fs::create_dir_all(directory)?;
         }
         let mut file = File::create(path)?;
-        file.write_all(b"It worked!")?;
+        file.write_all(object.to_bin().as_slice())?;
         drop(file);
 
         // acquire lock again and remove key from blocked list
@@ -126,13 +129,13 @@ impl Database {
         Ok(())
     }
 
-    pub async fn read<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn read<T: Storable>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key();
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
 
         // acquire lock
-        let (lock, condvar) = &*self.blocked;
+        let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
         // wait while key is blocked
         let mut readers = 0;
@@ -158,7 +161,7 @@ impl Database {
         }
 
         // do the read
-        self.append_log(Method::Read(SystemTime::now(), T::name(), object.id()));
+        // self.append_log(Method::Read(SystemTime::now(), T::name(), object.id()));
         let file = File::open(path)?;
 
         // acquire lock again and decrease readers
@@ -181,13 +184,13 @@ impl Database {
         Ok(())
     }
 
-    pub async fn update<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn update<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key();
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
 
         // acquire lock
-        let (lock, condvar) = &*self.blocked;
+        let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
         // wait while key is blocked
         while (*guard).get(&key).is_some() {
@@ -203,7 +206,7 @@ impl Database {
         }
 
         // do the update
-        self.append_log(Method::Update(SystemTime::now(), T::name(), object.id(), HashMap::new()));
+        // self.append_log(Method::Update(SystemTime::now(), T::name(), object.id(), HashMap::new()));
         let mut file = OpenOptions::new().write(true).open(path)?;
         file.write_all(b"It worked again!")?;
         drop(file);
@@ -217,13 +220,13 @@ impl Database {
         Ok(())
     }
 
-    pub async fn delete<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn delete<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key();
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
 
         // acquire lock
-        let (lock, condvar) = &*self.blocked;
+        let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
         // wait while key is blocked
         while (*guard).get(&key).is_some() {
@@ -239,7 +242,7 @@ impl Database {
         }
 
         // do the delete
-        self.append_log(Method::Delete(SystemTime::now(), T::name(), object.id()));
+        // self.append_log(Method::Delete(SystemTime::now(), T::name(), object.id()));
         fs::remove_file(path)?;
 
         // acquire lock again and remove key from blocked list
@@ -251,7 +254,9 @@ impl Database {
         Ok(())
     }
 
+    /*
     fn append_log(&self, method: Method) {
-        // writeln!(self.log.lock().unwrap(), "{}", method).unwrap();
+        writeln!(self.log.lock().unwrap(), "{}", method).unwrap();
     }
+    */
 }
