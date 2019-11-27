@@ -117,7 +117,7 @@ impl Database {
             fs::create_dir_all(directory)?;
         }
         let mut file = File::create(path)?;
-        file.write_all(object.to_bin().as_slice())?;
+        file.write_all(&object.to_bin())?;
         drop(file);
 
         // acquire lock again and remove key from blocked list
