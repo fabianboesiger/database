@@ -1,10 +1,7 @@
 [package]
 name = "database"
-description = "A simple database written in Rust."
 version = "0.1.0"
-authors = ["Fabian Bösiger <boefabia@student.ethz.ch>"]
 edition = "2018"
-licence = "MIT"
 
 [dependencies]
 storable_derive = { path = "storable_derive" }
