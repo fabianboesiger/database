@@ -1,9 +1,9 @@
 use std::fmt;
 
-pub trait Storable: Sized + fmt::Display {
-    fn name() -> String;
+pub trait Storable: Send + fmt::Display {
+    fn name() -> String where Self: Sized;
     fn id(&self) -> String;
     fn key(&self) -> String;
-    fn from_bin(&self, _: Vec<u8>) -> Result<(), ()>;
+    fn from_bin(&mut self, _: Vec<u8>);
     fn to_bin(&self) -> Vec<u8>;
 }

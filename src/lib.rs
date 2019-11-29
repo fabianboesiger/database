@@ -47,12 +47,11 @@ mod tests {
         let database = Database::new();
         let mut peter_original = Person::new("Peter", 25);
         database.create(&peter_original).expect("Database create failed");
-        let mut peter_read = Person::new("Peter", 0);
-        database.read(&mut peter_read).expect("Database read failed");
+        let peter_read = Person::from(String::from("Peter"), &database).expect("Database read failed");
         assert_eq!(peter_read, peter_original);
         peter_original.age = 42;
         database.update(&peter_original).expect("Database update failed");
-        database.read(&mut peter_read).expect("Database read failed");
+        let peter_read = Person::from(String::from("Peter"), &database).expect("Database read failed");
         assert_eq!(peter_read, peter_original);
         database.delete(&peter_original).expect("Database delete failed");
     }
@@ -77,7 +76,7 @@ mod tests {
     }
     */
     
-    /*
+    
     #[test]
     fn crud_thread_times() {
         let database = Arc::new(Database::new());
@@ -104,6 +103,5 @@ mod tests {
             println!("{} threads: {} ms", amount, start.elapsed().as_millis());
         }
     }
-    */
     
 }

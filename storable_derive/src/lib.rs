@@ -6,7 +6,6 @@ use syn;
 use syn::Data;
 use syn::Fields;
 use syn::Type;
-use std::fmt;
 
 #[proc_macro_derive(Storable, attributes(id))]
 pub fn storable_derive(input: TokenStream) -> TokenStream {
@@ -62,8 +61,6 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
         },
         Data::Enum(_) | Data::Union(_) => unimplemented!()
     };
-    let field_names_2 = field_names.clone();
-    let field_types_2 = field_types.clone();
 
     // currently, an id attribute has to exist
     if id_name == Option::None {
@@ -72,6 +69,7 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
 
     let mut to_bytes = Vec::new();
     let mut from_bytes = Vec::new();
+    let mut default = Vec::new();
     for field_type in &field_types {
         to_bytes.push(
             if field_type.is_ident("String") {
@@ -80,7 +78,7 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                 }
             } else {
                 quote! {
-                    value.to_le_bytes().as_ref()
+                    &value.to_le_bytes()[..]
                 }
             }
         );
@@ -109,6 +107,17 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                 }
             }
         );
+        default.push(
+            if field_type.is_ident("String") {
+                quote! {
+                    String::new()
+                }
+            } else {
+                quote! {
+                    0
+                }
+            }
+        );
         /*
         from_binary.push(
             if field_type.is_ident("str") {
@@ -134,7 +143,7 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
             }
         } else {
             quote! {
-                value.to_le_bytes().as_ref()
+                &value.to_le_bytes()[..]
             }
         }
     } else {
@@ -143,7 +152,22 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
 
     // generate implementation
     let gen = quote! {
+
+        impl #struct_name {
+            fn from(id: #id_type, database: &Database) -> Result<#struct_name, Box<dyn std::error::Error>> {
+                let mut output = #struct_name {
+                    #(
+                        #field_names: #default,
+                    )*
+                };
+                output.#id_name = id;
+                database.read(&mut output)?;
+                Ok(output)
+            }
+        }
+
         impl Storable for #struct_name {
+
             fn name() -> String {
                 format!("{}", stringify!(#struct_name).to_lowercase())
             }
@@ -152,10 +176,13 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                 let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
                 let mut output = String::new();
                 let mut sextets = Vec::<u8>::new();
-                let value = &self.#id_name;
+                let value = self.#id_name.clone();
                 let bytes = #to_bytes_id;
+                
                 for (i, &byte) in bytes.iter().enumerate() {
-                    /*match i % 3 {
+                    //byte.xafsd();
+                    match i % 3 {
+                        /*
                         0 => {
                             sextets.push(byte & 0b00000011);
                             sextets.push((byte & 0b11111100) >> 6);
@@ -170,16 +197,32 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                             sextets.push(last & ((byte & 0b00111111) << 4));
                             sextets.push((byte & 0b11000000) >> 2);
                         },
+                        */
+                        0 => {
+                            sextets.push(byte & 0b00111111);
+                            sextets.push((byte & 0b11000000) >> 6);
+                        },
+                        1 => {
+                            let last = sextets.pop().unwrap();
+                            sextets.push(last | ((byte & 0b00001111) << 2));
+                            sextets.push((byte & 0b11110000) >> 4);
+                        },
+                        2 => {
+                            let last = sextets.pop().unwrap();
+                            sextets.push(last | ((byte & 0b00000011) << 4));
+                            sextets.push((byte & 0b11111100) >> 2);
+                        },
                         _ => unreachable!()
-                    }*/
+                    }
                 };
                 if sextets.len() > 128 {
                     panic!("File name too large");
                 }
-                for sextet in sextets {
+                for &sextet in &sextets {
                     output.push(alphabet.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
                 }
-                
+
+                //println!("{} -> {:?} -> {:?} -> {}", value, bytes, sextets, output);
                 output
             }
 
@@ -187,8 +230,9 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                 format!("{}/{}", #struct_name::name(), self.id())
             }
 
-            fn from_bin(&self, mut bin: Vec<u8>) -> Result<(), ()> {
-                /*bin.reverse();
+            fn from_bin(&mut self, mut bin: Vec<u8>) {
+                bin.reverse();
+                /*
                 #(
                     /*
                     let mut name = Vec::new();
@@ -211,14 +255,9 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                     self.#field_names = #from_bytes;
                 )*
                 */
-                
-                #struct_name {
-                    #(
-                        #field_names: {#from_bytes},
-                    )*
-                };
-                
-                Ok(())
+                #(
+                    self.#field_names = {#from_bytes};
+                )*
             }
 
             fn to_bin(&self) -> Vec<u8> {

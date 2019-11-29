@@ -8,6 +8,7 @@ use std::io::prelude::*;
 use std::sync::Mutex;
 use std::sync::Condvar;
 use std::collections::HashMap;
+// use std::any::Any;
 // use std::time::SystemTime;
 
 enum Operation {
@@ -38,9 +39,9 @@ impl fmt::Display for Method {
 */
 
 pub struct Database {
-    blocked: (Mutex<HashMap<String, Operation>>, Condvar)/*,
-    log: Mutex<File>
-    */
+    blocked: (Mutex<HashMap<String, Operation>>, Condvar)
+    // cache: Mutex<(HashMap<String, Box<dyn Any + Send>>, Vec<String>)>,
+    // log: Mutex<File>
 }
 
 #[derive(Debug)]
@@ -77,7 +78,9 @@ impl Database {
         }
         */
         Database {
-            blocked: (Mutex::new(HashMap::new()), Condvar::new())/*,
+            blocked: (Mutex::new(HashMap::new()), Condvar::new())
+            // cache: Mutex::new((HashMap::new(), Vec::new()))
+            /*,
             log: Mutex::new(
                 OpenOptions::new()
                     .append(true)
@@ -162,7 +165,22 @@ impl Database {
 
         // do the read
         // self.append_log(Method::Read(SystemTime::now(), T::name(), object.id()));
-        let file = File::open(path)?;
+        /*
+        let guard = self.cache.lock().unwrap();
+        let (map, list) = (&guard.0, &guard.1);
+        match map.get(&key) {
+            Some(o) => {
+                object = o.downcast_mut::<T>().unwrap();
+                list.remove(&key);
+                list.push(key.clone());
+            }
+            None => {
+                map.insert(key.clone(), Box::new(*object));
+                list.push(key.clone());
+            }
+        }
+        */
+        object.from_bin(fs::read(path)?);
 
         // acquire lock again and decrease readers
         let mut guard = lock.lock().unwrap();
@@ -207,8 +225,13 @@ impl Database {
 
         // do the update
         // self.append_log(Method::Update(SystemTime::now(), T::name(), object.id(), HashMap::new()));
+        let directory_string = format!("data/{}", T::name());
+        let directory = Path::new(&directory_string);
+        if !directory.exists() {
+            fs::create_dir_all(directory)?;
+        }
         let mut file = OpenOptions::new().write(true).open(path)?;
-        file.write_all(b"It worked again!")?;
+        file.write_all(&object.to_bin())?;
         drop(file);
 
         // acquire lock again and remove key from blocked list
