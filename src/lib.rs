@@ -11,20 +11,20 @@ mod tests {
     use std::time::Instant;
     // use futures::executor;
 
-    #[derive(Storable, PartialEq, Clone, Debug)]
+    #[derive(Storable, PartialEq, Debug)]
     struct Person {
-        #[id] name: &'static str,
+        #[id] name: String,
         age: u16,
-        text: &'static str
+        text: String
     }
 
     
     impl Person {
         pub fn new(name: &'static str, age: u16) -> Person {
             Person {
-                name,
+                name: String::from(name),
                 age,
-                text: "Hello\n\tWorld!"
+                text: String::from("Hello\n\tWorld!")
             }
         }
     }
