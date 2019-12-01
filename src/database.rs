@@ -121,6 +121,7 @@ impl Database {
         }
         let mut file = File::create(path)?;
         file.write_all(&object.to_bin())?;
+        file.flush()?;
         drop(file);
 
         // acquire lock again and remove key from blocked list
@@ -232,6 +233,7 @@ impl Database {
         }
         let mut file = OpenOptions::new().write(true).open(path)?;
         file.write_all(&object.to_bin())?;
+        file.flush()?;
         drop(file);
 
         // acquire lock again and remove key from blocked list
