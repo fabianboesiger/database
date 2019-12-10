@@ -15,7 +15,8 @@ mod tests {
     struct Person {
         #[id] name: String,
         age: u16,
-        text: String
+        text: String,
+        //vec: Vec::<u32>
     }
 
     

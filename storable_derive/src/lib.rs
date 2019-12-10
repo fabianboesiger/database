@@ -1,11 +1,32 @@
 extern crate proc_macro;
 
-use crate::proc_macro::TokenStream;
+use proc_macro::TokenStream;
 use quote::quote;
 use syn;
 use syn::Data;
 use syn::Fields;
 use syn::Type;
+use syn::Path;
+
+fn type_to_quote_to_bytes(field_type: &Path) -> crate::proc_macro2::TokenStream {
+    if field_type.is_ident("String") {
+        quote! {
+            format!("{}\0", value).as_bytes()
+        }
+    } else 
+    if field_type.is_ident("Vec") {
+        quote! {
+            let size = value.len();
+            for element in value {
+
+            }
+        }
+    } else {
+        quote! {
+            &value.to_le_bytes()[..]
+        }
+    }
+}
 
 #[proc_macro_derive(Storable, attributes(id))]
 pub fn storable_derive(input: TokenStream) -> TokenStream {
@@ -45,7 +66,7 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                             }
                             if let Type::Path(tp) = current_field {
                                 field_names.push(field_name);
-                                field_types.push(&tp.path);                      // check if id
+                                field_types.push(&tp.path);
                                 if is_id {
                                     id_name = Some(field_name);
                                     id_type = Some(&tp.path);
@@ -71,17 +92,7 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
     let mut from_bytes = Vec::new();
     let mut default = Vec::new();
     for field_type in &field_types {
-        to_bytes.push(
-            if field_type.is_ident("String") {
-                quote! {
-                    format!("{}\0", value).as_bytes()
-                }
-            } else {
-                quote! {
-                    &value.to_le_bytes()[..]
-                }
-            }
-        );
+        to_bytes.push(type_to_quote_to_bytes(field_type));
         from_bytes.push(
             if field_type.is_ident("String") {
                 quote! {
@@ -94,6 +105,11 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
                         bytes.push(byte);
                     }
                     String::from(std::str::from_utf8(&bytes).unwrap())
+                }
+            } else
+            if field_type.is_ident("Vec") {
+                quote! {
+                    
                 }
             } else {
                 quote! {
