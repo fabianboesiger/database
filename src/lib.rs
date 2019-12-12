@@ -1,22 +1,21 @@
 pub mod database;
-pub mod storable;
 
 #[cfg(test)]
 mod tests {
     use super::database::Database;
-    use super::storable::Storable;
-    use storable_derive::Storable;
+    use super::database::Storable;
+    use super::database::Serializable;
+    use super::database::Error;
     use std::thread;
     use std::sync::Arc;
     use std::time::Instant;
-    // use futures::executor;
 
-    #[derive(Storable, PartialEq, Debug)]
+    #[derive(Storable, Serializable, Default, PartialEq, Debug)]
     struct Person {
         #[id] name: String,
         age: u16,
         text: String,
-        //vec: Vec::<u32>
+        vec: Vec::<u128>
     }
 
     
@@ -25,12 +24,13 @@ mod tests {
             Person {
                 name: String::from(name),
                 age,
-                text: String::from("Hello\n\tWorld!")
+                text: String::from("Hello\n\tWorld!"),
+                vec: Vec::new()
             }
         }
     }
 
-    #[derive(Storable)]
+    #[derive(Storable, Serializable, Default)]
     struct Number {
         #[id] id: u32
     }

@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
+serializable_derive = { path = "serializable_derive" }
 storable_derive = { path = "storable_derive" }

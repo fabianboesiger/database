@@ -1,4 +1,10 @@
-use super::storable::Storable;
+mod storable;
+mod serializable;
+
+pub use storable::Storable;
+pub use serializable::Serializable;
+pub use storable_derive::Storable;
+pub use serializable_derive::Serializable;
 use std::fmt;
 use std::path::Path;
 use std::fs;
@@ -91,8 +97,8 @@ impl Database {
         }
     }
 
-    pub fn create<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
-        let key = object.key();
+    pub fn create<T: Storable + Serializable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+        let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
 
@@ -114,13 +120,13 @@ impl Database {
 
         // do the create
         // self.append_log(Method::Create(SystemTime::now(), T::name(), object.id(), HashMap::new()));
-        let directory_string = format!("data/{}", T::name());
+        let directory_string = format!("data/{}", T::name()?);
         let directory = Path::new(&directory_string);
         if !directory.exists() {
             fs::create_dir_all(directory)?;
         }
         let mut file = File::create(path)?;
-        file.write_all(&object.to_bin())?;
+        file.write_all(&object.serialize())?;
         file.flush()?;
         drop(file);
 
@@ -133,8 +139,8 @@ impl Database {
         Ok(())
     }
 
-    pub fn read<T: Storable>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>> {
-        let key = object.key();
+    pub fn read<T: Storable + Serializable>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>> {
+        let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
 
@@ -181,7 +187,7 @@ impl Database {
             }
         }
         */
-        object.from_bin(fs::read(path)?);
+        object.deserialize(&mut fs::read(path)?);
 
         // acquire lock again and decrease readers
         let mut guard = lock.lock().unwrap();
@@ -203,8 +209,8 @@ impl Database {
         Ok(())
     }
 
-    pub fn update<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
-        let key = object.key();
+    pub fn update<T: Storable + Serializable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+        let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
 
@@ -226,13 +232,13 @@ impl Database {
 
         // do the update
         // self.append_log(Method::Update(SystemTime::now(), T::name(), object.id(), HashMap::new()));
-        let directory_string = format!("data/{}", T::name());
+        let directory_string = format!("data/{}", T::name()?);
         let directory = Path::new(&directory_string);
         if !directory.exists() {
             fs::create_dir_all(directory)?;
         }
         let mut file = OpenOptions::new().write(true).open(path)?;
-        file.write_all(&object.to_bin())?;
+        file.write_all(&object.serialize())?;
         file.flush()?;
         drop(file);
 
@@ -245,8 +251,8 @@ impl Database {
         Ok(())
     }
 
-    pub fn delete<T: Storable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
-        let key = object.key();
+    pub fn delete<T: Storable + Serializable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+        let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
 
