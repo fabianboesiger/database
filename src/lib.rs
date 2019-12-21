@@ -48,11 +48,11 @@ mod tests {
         let database = Database::new();
         let mut peter_original = Person::new("Peter", 25);
         database.create(&peter_original).expect("Database create failed");
-        let peter_read = Person::from(String::from("Peter"), &database).expect("Database read failed");
+        let peter_read = Person::read(String::from("Peter"), &database).expect("Database read failed");
         assert_eq!(peter_read, peter_original);
         peter_original.age = 42;
         database.update(&peter_original).expect("Database update failed");
-        let peter_read = Person::from(String::from("Peter"), &database).expect("Database read failed");
+        let peter_read = Person::read(String::from("Peter"), &database).expect("Database read failed");
         assert_eq!(peter_read, peter_original);
         database.delete(&peter_original).expect("Database delete failed");
     }
