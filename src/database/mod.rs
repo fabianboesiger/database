@@ -1,10 +1,10 @@
-mod storable;
-mod serializable;
+mod store;
+mod serialize;
 
-pub use storable::Storable;
-pub use serializable::Serializable;
-pub use storable_derive::Storable;
-pub use serializable_derive::Serializable;
+pub use store::Store;
+pub use serialize::Serialize;
+pub use store_derive::Store;
+pub use serialize_derive::Serialize;
 use std::fmt;
 use std::path::Path;
 use std::fs;
@@ -97,7 +97,7 @@ impl Database {
         }
     }
 
-    pub fn create<T: Storable + Serializable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn create<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -139,7 +139,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn read<T: Storable + Serializable>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn read<T: Store + Serialize>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -209,7 +209,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn update<T: Storable + Serializable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn update<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -251,7 +251,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn delete<T: Storable + Serializable>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn delete<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);

@@ -1,5 +1,5 @@
 [package]
-name = "serializable_derive"
+name = "store_derive"
 version = "0.1.0"
 authors = ["fabianboesiger <boesiger.fabian@outlook.com>"]
 edition = "2018"

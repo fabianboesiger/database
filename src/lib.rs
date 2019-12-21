@@ -3,14 +3,14 @@ pub mod database;
 #[cfg(test)]
 mod tests {
     use super::database::Database;
-    use super::database::Storable;
-    use super::database::Serializable;
+    use super::database::Store;
+    use super::database::Serialize;
     use super::database::Error;
     use std::thread;
     use std::sync::Arc;
     use std::time::Instant;
 
-    #[derive(Storable, Serializable, Default, PartialEq, Debug)]
+    #[derive(Store, Serialize, Default, PartialEq, Debug)]
     struct Person {
         #[id] name: String,
         age: u16,
@@ -30,7 +30,7 @@ mod tests {
         }
     }
 
-    #[derive(Storable, Serializable, Default)]
+    #[derive(Store, Serialize, Default)]
     struct Number {
         #[id] id: u32
     }

@@ -6,13 +6,13 @@ use syn;
 use syn::Data;
 use syn::Fields;
 
-#[proc_macro_derive(Serializable)]
-pub fn serializable_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Serialize)]
+pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
-    impl_serializable(&ast)
+    impl_serialize(&ast)
 }
 
-fn impl_serializable(ast: &syn::DeriveInput) -> TokenStream {
+fn impl_serialize(ast: &syn::DeriveInput) -> TokenStream {
 
     let struct_name = &ast.ident;
     let mut field_names = Vec::new();
@@ -34,7 +34,7 @@ fn impl_serializable(ast: &syn::DeriveInput) -> TokenStream {
     };
 
     let gen = quote! {
-        impl Serializable for #struct_name {
+        impl Serialize for #struct_name {
             fn serialize(&self) -> Vec<u8> {
                 let mut bytes = Vec::new();
                 #(

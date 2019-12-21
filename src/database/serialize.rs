@@ -1,4 +1,4 @@
-pub trait Serializable {
+pub trait Serialize {
     fn serialize(&self) -> Vec<u8>;
     fn deserialize(&mut self, _: &mut Vec<u8>);
 }
@@ -6,7 +6,7 @@ pub trait Serializable {
 macro_rules! impl_Serializable_for_int {
     ($($t:ty),+) => {
         $(
-            impl Serializable for $t {
+            impl Serialize for $t {
                 fn serialize(&self) -> Vec<u8> {
                     let mut bytes = Vec::new();
                     bytes.extend_from_slice(&self.to_le_bytes()[..]);
@@ -27,26 +27,9 @@ macro_rules! impl_Serializable_for_int {
     }
 }
 
-impl_Serializable_for_int!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128);
+impl_Serializable_for_int!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
 
-// currently nightly, so no support
-/*
-macro_rules! impl_ToBytes_for_float {
-    ($($t:ty),+) => {
-        $(impl Serializable for $t {
-            fn serialize(&self) -> Vec<u8> {
-                let mut bytes = Vec::new();
-                bytes.extend_from_slice(&self.to_le_bytes()[..]);
-                bytes
-            }
-        })*
-    }
-}
-
-impl_ToBytes_for_float!(f32, f64);
-*/
-
-impl Serializable for bool {
+impl Serialize for bool {
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.push(if *self { 1 } else { 0 });
@@ -58,7 +41,7 @@ impl Serializable for bool {
     }
 }
 
-impl<S: Serializable + Default> Serializable for Vec<S> {
+impl<S: Serialize + Default> Serialize for Vec<S> {
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.append(&mut (self.len() as u64).serialize());
@@ -79,7 +62,7 @@ impl<S: Serializable + Default> Serializable for Vec<S> {
     }
 }
 
-impl Serializable for String {
+impl Serialize for String {
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(format!("{}\0", self).as_bytes());

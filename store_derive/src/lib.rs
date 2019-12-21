@@ -7,13 +7,13 @@ use syn::Data;
 use syn::Fields;
 use syn::Type;
 
-#[proc_macro_derive(Storable, attributes(id))]
-pub fn storable_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Store, attributes(id))]
+pub fn store_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
-    impl_storable(&ast)
+    impl_store(&ast)
 }
 
-fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
+fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
     // find struct name
     let struct_name = &ast.ident;
     // find id name and type
@@ -71,7 +71,7 @@ fn impl_storable(ast: &syn::DeriveInput) -> TokenStream {
             }
         }
 
-        impl Storable for #struct_name {
+        impl Store for #struct_name {
 
             fn name() -> Result<String, Box<dyn std::error::Error>> {
                 let name = stringify!(#struct_name);
