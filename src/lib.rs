@@ -1,11 +1,9 @@
-pub mod database;
+mod database;
+pub use database::{Database, Store, Serialize, Error};
 
 #[cfg(test)]
 mod tests {
-    use super::database::Database;
-    use super::database::Store;
-    use super::database::Serialize;
-    use super::database::Error;
+    use super::{Database, Store, Serialize, Error};
     use std::thread;
     use std::sync::Arc;
     use std::time::Instant;
