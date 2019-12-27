@@ -63,14 +63,24 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
     let gen = quote! {
 
         impl #struct_name {
-            fn read(id: #id_type, database: &Database) -> Result<#struct_name, Box<dyn std::error::Error>> {
+            fn create<'a>(&self, database: &'a Database) -> Result<(), Box<dyn std::error::Error>> {
+                database.create(self)?;
+                Ok(())
+            }
+
+            fn update<'a>(&self, database: &'a Database) -> Result<(), Box<dyn std::error::Error>> {
+                database.update(self)?;
+                Ok(())
+            }
+
+            fn read<'a>(id: #id_type, database: &'a Database) -> Result<#struct_name, Box<dyn std::error::Error>> {
                 let mut output = Self::default();
                 output.#id_name = id;
                 database.read(&mut output)?;
                 Ok(output)
             }
 
-            fn delete(id: #id_type, database: &Database) -> Result<#struct_name, Box<dyn std::error::Error>> {
+            fn delete<'a>(id: #id_type, database: &'a Database) -> Result<#struct_name, Box<dyn std::error::Error>> {
                 let mut output = Self::default();
                 output.#id_name = id;
                 database.delete(&output)?;

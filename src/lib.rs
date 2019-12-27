@@ -1,5 +1,5 @@
 mod database;
-pub use database::{Database, Store, Serialize, Error};
+pub use crate::database::{Database, Store, Serialize, Error};
 
 #[cfg(test)]
 mod tests {
@@ -8,14 +8,13 @@ mod tests {
     use std::sync::Arc;
     use std::time::Instant;
 
-    #[derive(Store, Serialize, Default, PartialEq, Debug)]
+    #[derive(Serialize, Store, Default, PartialEq, Debug)]
     struct Person {
         #[id] name: String,
         age: u16,
         text: String,
         vec: Vec::<u128>
     }
-
     
     impl Person {
         pub fn new(name: &'static str, age: u16) -> Person {
@@ -28,7 +27,7 @@ mod tests {
         }
     }
 
-    #[derive(Store, Serialize, Default)]
+    #[derive(Serialize, Store, Default)]
     struct Number {
         #[id] id: u32
     }
@@ -45,11 +44,13 @@ mod tests {
     fn crud_basics() {
         let database = Database::new();
         let mut peter_original = Person::new("Peter", 25);
-        database.create(&peter_original).expect("Database create failed");
+        //database.create(&peter_original).expect("Database create failed");
+        peter_original.create(&database).expect("Database create failed");
         let peter_read = Person::read(String::from("Peter"), &database).expect("Database read failed");
         assert_eq!(peter_read, peter_original);
         peter_original.age = 42;
-        database.update(&peter_original).expect("Database update failed");
+        //database.update(&peter_original).expect("Database update failed");
+        peter_original.update(&database).expect("Database update failed");
         let peter_read = Person::read(String::from("Peter"), &database).expect("Database read failed");
         assert_eq!(peter_read, peter_original);
         database.delete(&peter_original).expect("Database delete failed");
