@@ -98,7 +98,7 @@ impl Database {
         }
     }
 
-    pub fn create<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {        
+    pub fn create<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {                
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -106,7 +106,6 @@ impl Database {
         // acquire lock
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
-        println!("create start {:?}", guard);
 
         // wait while key is blocked
         while (*guard).get(&key).is_some() {
@@ -117,21 +116,24 @@ impl Database {
         drop(guard);
 
         // return error if file exists
-        if path.exists() {
-            return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
-        }
+        let output = if path.exists() {
+            Err(Box::new(Error::new()) as Box<dyn std::error::Error>)
+        } else {
+            let directory_string = format!("data/{}", T::name()?);
+            let directory = Path::new(&directory_string);
+            if !directory.exists() {
+                fs::create_dir_all(directory)?;
+            }
+            let mut file = File::create(path)?;
+            file.write_all(&object.serialize())?;
+            file.flush()?;
+            drop(file);
+            Ok(())
+        };
 
         // do the create
         // self.append_log(Method::Create(SystemTime::now(), T::name(), object.id(), HashMap::new()));
-        let directory_string = format!("data/{}", T::name()?);
-        let directory = Path::new(&directory_string);
-        if !directory.exists() {
-            fs::create_dir_all(directory)?;
-        }
-        let mut file = File::create(path)?;
-        file.write_all(&object.serialize())?;
-        file.flush()?;
-        drop(file);
+        
 
         // acquire lock again and remove key from blocked list
         let mut guard = lock.lock().unwrap();
@@ -139,10 +141,10 @@ impl Database {
         drop(guard);
         condvar.notify_all();
 
-        Ok(())
+        output
     }
 
-    pub fn read<T: Store + Serialize>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn read<T: Store + Serialize>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>> {        
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -150,7 +152,6 @@ impl Database {
         // acquire lock
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
-        println!("read start {:?}", guard);
 
         // wait while key is blocked
         let mut readers = 0;
@@ -171,9 +172,12 @@ impl Database {
         drop(guard);
 
         // return error if file doesn't exist
-        if !path.exists() {
-            return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
-        }
+        let output = if !path.exists() {
+            Err(Box::new(Error::new()) as Box<dyn std::error::Error>)
+        } else {
+            object.deserialize(&mut fs::read(path)?);
+            Ok(())
+        };
 
         // do the read
         // self.append_log(Method::Read(SystemTime::now(), T::name(), object.id()));
@@ -192,11 +196,9 @@ impl Database {
             }
         }
         */
-        object.deserialize(&mut fs::read(path)?);
 
         // acquire lock again and decrease readers
         let mut guard = lock.lock().unwrap();
-        println!("read end 1 {:?}", guard);
         let updated_readers = match (*guard).get(&key) {
             Some(operation) => match operation {
                 Operation::Read(r) => *r,
@@ -204,17 +206,15 @@ impl Database {
             },
             None => panic!("Key not found but should be there")
         } - 1;
-        println!("read end 2 {:?}", guard);
         if updated_readers == 0 {
             guard.remove(&key);
         } else {
             guard.insert(key.clone(), Operation::Read(updated_readers));
         }
-        println!("read end 3 {:?}", guard);
         drop(guard);
         condvar.notify_all();
 
-        Ok(())
+        output
     }
 
     pub fn update<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
@@ -234,21 +234,22 @@ impl Database {
         drop(guard);
 
         // return error if file doesn't exist
-        if !path.exists() {
-            return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
-        }
-
-        // do the update
-        // self.append_log(Method::Update(SystemTime::now(), T::name(), object.id(), HashMap::new()));
-        let directory_string = format!("data/{}", T::name()?);
-        let directory = Path::new(&directory_string);
-        if !directory.exists() {
-            fs::create_dir_all(directory)?;
-        }
-        let mut file = OpenOptions::new().write(true).open(path)?;
-        file.write_all(&object.serialize())?;
-        file.flush()?;
-        drop(file);
+        let output = if !path.exists() {
+            Err(Box::new(Error::new()) as Box<dyn std::error::Error>)
+        } else {
+            // do the update
+            // self.append_log(Method::Update(SystemTime::now(), T::name(), object.id(), HashMap::new()));
+            let directory_string = format!("data/{}", T::name()?);
+            let directory = Path::new(&directory_string);
+            if !directory.exists() {
+                fs::create_dir_all(directory)?;
+            }
+            let mut file = OpenOptions::new().write(true).open(path)?;
+            file.write_all(&object.serialize())?;
+            file.flush()?;
+            drop(file);
+            Ok(())
+        };
 
         // acquire lock again and remove key from blocked list
         let mut guard = lock.lock().unwrap();
@@ -256,7 +257,7 @@ impl Database {
         drop(guard);
         condvar.notify_all();
 
-        Ok(())
+        output
     }
 
     pub fn delete<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
@@ -276,13 +277,14 @@ impl Database {
         drop(guard);
 
         // return error if file doesn't exist
-        if !path.exists() {
-            return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
-        }
-
-        // do the delete
-        // self.append_log(Method::Delete(SystemTime::now(), T::name(), object.id()));
-        fs::remove_file(path)?;
+        let output = if !path.exists() {
+            Err(Box::new(Error::new()) as Box<dyn std::error::Error>)
+        } else {
+            // do the delete
+            // self.append_log(Method::Delete(SystemTime::now(), T::name(), object.id()));
+            fs::remove_file(path)?;
+            Ok(())
+        };
 
         // acquire lock again and remove key from blocked list
         let mut guard = lock.lock().unwrap();
@@ -290,7 +292,7 @@ impl Database {
         drop(guard);
         condvar.notify_all();
 
-        Ok(())
+        output
     }
 
     /*
