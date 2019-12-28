@@ -17,6 +17,7 @@ use std::collections::HashMap;
 // use std::any::Any;
 // use std::time::SystemTime;
 
+#[derive(Debug)]
 enum Operation {
     Write,
     Read(u32)
@@ -97,7 +98,7 @@ impl Database {
         }
     }
 
-    pub fn create<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {println!("create");
+    pub fn create<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {        
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -105,8 +106,10 @@ impl Database {
         // acquire lock
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
+        println!("create {:?}", guard);
+
         // wait while key is blocked
-        while dbg!((*guard).get(&key).is_some()) {
+        while (*guard).get(&key).is_some() {
             guard = condvar.wait(guard).unwrap();
         }
         // if key isn't locked, insert it into the locked set and release lock
