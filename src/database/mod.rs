@@ -14,8 +14,6 @@ use std::io::prelude::*;
 use std::sync::Mutex;
 use std::sync::Condvar;
 use std::collections::HashMap;
-// use std::any::Any;
-// use std::time::SystemTime;
 
 #[derive(Debug)]
 enum Operation {
@@ -23,81 +21,45 @@ enum Operation {
     Read(u32)
 }
 
-/*
-type Pairs = HashMap<String, String>;
-
-enum Method {
-    Create(SystemTime, String, String, Pairs),
-    Read(SystemTime, String, String),
-    Update(SystemTime, String, String, Pairs),
-    Delete(SystemTime, String, String)
-}
-
-impl fmt::Display for Method {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &*self {
-            Method::Create(t, n, k, p) => write!(f, "{} create {} {} {:?}", t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos(), n, k, p),
-            Method::Read(t, n, k) => write!(f, "{} read {} {}", t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos(), n, k),
-            Method::Update(t, n, k, p) => write!(f, "{} update {} {} {:?}", t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos(), n, k, p),
-            Method::Delete(t, n, k) => write!(f, "{} delete {} {}", t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos(), n, k)
-        }
-    }
-}
-*/
-
-pub struct Database {
-    blocked: (Mutex<HashMap<String, Operation>>, Condvar)
-    // cache: Mutex<(HashMap<String, Box<dyn Any + Send>>, Vec<String>)>,
-    // log: Mutex<File>
-}
-
 #[derive(Debug)]
 pub struct Error {
-
+    description: &'static str
 }
 
 impl Error {
-    pub fn new() -> Error {
+    pub fn new(description: &'static str) -> Error {
         Error {
+            description
         }
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "")
+        write!(f, "{}", self.description)
     }
 }
 
 impl std::error::Error for Error {
     fn description(&self) -> &str {
-        "description"
+        self.description
     }
 }
 
+/// The `Database` struct contains everything used for a database.
+pub struct Database {
+    blocked: (Mutex<HashMap<String, Operation>>, Condvar)
+}
+
 impl Database {
+    /// Creates a new database. The data is stored in the "data" directory at the project root, which is created automatically if it doesn't exist already.
     pub fn new() -> Database {
-        /*
-        let directory_string = "data";
-        let directory = Path::new(directory_string);
-        if !directory.exists() {
-            fs::create_dir_all(directory).expect("Data directory could not be created");
-        }
-        */
         Database {
             blocked: (Mutex::new(HashMap::new()), Condvar::new())
-            // cache: Mutex::new((HashMap::new(), Vec::new()))
-            /*,
-            log: Mutex::new(
-                OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open("data/log.txt")
-                    .expect("Could not open log file")
-            )*/
         }
     }
 
+    /// Creates an entry in the database.
     pub fn create<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {                
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
@@ -115,10 +77,11 @@ impl Database {
         guard.insert(key.clone(), Operation::Write);
         drop(guard);
 
-        // return error if file exists
         let output = if path.exists() {
-            Err(Box::new(Error::new()) as Box<dyn std::error::Error>)
+            // return error if file exists
+            Err(Box::new(Error::new("Entry already exists.")) as Box<dyn std::error::Error>)
         } else {
+            // do the create
             let directory_string = format!("data/{}", T::name()?);
             let directory = Path::new(&directory_string);
             if !directory.exists() {
@@ -131,10 +94,6 @@ impl Database {
             Ok(())
         };
 
-        // do the create
-        // self.append_log(Method::Create(SystemTime::now(), T::name(), object.id(), HashMap::new()));
-        
-
         // acquire lock again and remove key from blocked list
         let mut guard = lock.lock().unwrap();
         guard.remove(&key);
@@ -144,6 +103,7 @@ impl Database {
         output
     }
 
+    /// Reads an entry from the database.
     pub fn read<T: Store + Serialize>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>> {        
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
@@ -171,32 +131,15 @@ impl Database {
         guard.insert(key.clone(), Operation::Read(readers + 1));
         drop(guard);
 
-        // return error if file doesn't exist
         let output = if !path.exists() {
-            Err(Box::new(Error::new()) as Box<dyn std::error::Error>)
+            // return error if file doesn't exist
+            Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
         } else {
+            // do the read
             object.deserialize(&mut fs::read(path)?);
             Ok(())
         };
-
-        // do the read
-        // self.append_log(Method::Read(SystemTime::now(), T::name(), object.id()));
-        /*
-        let guard = self.cache.lock().unwrap();
-        let (map, list) = (&guard.0, &guard.1);
-        match map.get(&key) {
-            Some(o) => {
-                object = o.downcast_mut::<T>().unwrap();
-                list.remove(&key);
-                list.push(key.clone());
-            }
-            None => {
-                map.insert(key.clone(), Box::new(*object));
-                list.push(key.clone());
-            }
-        }
-        */
-
+        
         // acquire lock again and decrease readers
         let mut guard = lock.lock().unwrap();
         let updated_readers = match (*guard).get(&key) {
@@ -217,6 +160,7 @@ impl Database {
         output
     }
 
+    /// Updates an entry in the database.
     pub fn update<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
@@ -233,12 +177,11 @@ impl Database {
         guard.insert(key.clone(), Operation::Write);
         drop(guard);
 
-        // return error if file doesn't exist
         let output = if !path.exists() {
-            Err(Box::new(Error::new()) as Box<dyn std::error::Error>)
+            // return error if file doesn't exist
+            Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
         } else {
             // do the update
-            // self.append_log(Method::Update(SystemTime::now(), T::name(), object.id(), HashMap::new()));
             let directory_string = format!("data/{}", T::name()?);
             let directory = Path::new(&directory_string);
             if !directory.exists() {
@@ -260,6 +203,7 @@ impl Database {
         output
     }
 
+    /// Deletes an entry from the database.
     pub fn delete<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
@@ -276,12 +220,11 @@ impl Database {
         guard.insert(key.clone(), Operation::Write);
         drop(guard);
 
-        // return error if file doesn't exist
         let output = if !path.exists() {
-            Err(Box::new(Error::new()) as Box<dyn std::error::Error>)
+            // return error if file doesn't exist
+            Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
         } else {
             // do the delete
-            // self.append_log(Method::Delete(SystemTime::now(), T::name(), object.id()));
             fs::remove_file(path)?;
             Ok(())
         };
@@ -295,9 +238,4 @@ impl Database {
         output
     }
 
-    /*
-    fn append_log(&self, method: Method) {
-        writeln!(self.log.lock().unwrap(), "{}", method).unwrap();
-    }
-    */
 }

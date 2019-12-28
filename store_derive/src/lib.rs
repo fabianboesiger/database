@@ -93,9 +93,23 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
             fn name() -> Result<String, Box<dyn std::error::Error>> {
                 let name = stringify!(#struct_name);
                 if name.len() > 128 {
-                    return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
+                    return Err(Box::new(Error::new("Name exceeds maximum length.")) as Box<dyn std::error::Error>);
                 }
-                Ok(format!("{}", name.to_lowercase()))
+                Ok(format!("{}", 
+                    name
+                        .chars()
+                        .enumerate()
+                        .map(|(i, c)| {
+                            let mut output = Vec::new();
+                            if i > 0 && c.is_ascii_uppercase() {
+                                output.push('-');
+                            }
+                            output.push(c.to_ascii_lowercase());
+                            output
+                        })
+                        .flatten()
+                        .collect::<String>()
+                ))
             }
     
             fn id(&self) -> Result<String, Box<dyn std::error::Error>> {
@@ -124,7 +138,7 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
                     }
                 };
                 if sextets.len() > 128 {
-                    return Err(Box::new(Error::new()) as Box<dyn std::error::Error>);
+                    return Err(Box::new(Error::new("ID exceeds maximum length.")) as Box<dyn std::error::Error>);
                 }
                 for &sextet in &sextets {
                     output.push(alphabet.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
