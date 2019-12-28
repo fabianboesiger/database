@@ -106,7 +106,7 @@ impl Database {
         // acquire lock
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
-        println!("create {:?}", guard);
+        println!("create start {:?}", guard);
 
         // wait while key is blocked
         while (*guard).get(&key).is_some() {
@@ -150,6 +150,8 @@ impl Database {
         // acquire lock
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
+        println!("read start {:?}", guard);
+
         // wait while key is blocked
         let mut readers = 0;
         while match (*guard).get(&key) {
@@ -194,6 +196,7 @@ impl Database {
 
         // acquire lock again and decrease readers
         let mut guard = lock.lock().unwrap();
+        println!("read end 1 {:?}", guard);
         let updated_readers = match (*guard).get(&key) {
             Some(operation) => match operation {
                 Operation::Read(r) => *r,
@@ -201,11 +204,13 @@ impl Database {
             },
             None => panic!("Key not found but should be there")
         } - 1;
+        println!("read end 2 {:?}", guard);
         if updated_readers == 0 {
             guard.remove(&key);
         } else {
             guard.insert(key.clone(), Operation::Read(updated_readers));
         }
+        println!("read end 3 {:?}", guard);
         drop(guard);
         condvar.notify_all();
 
