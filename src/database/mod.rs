@@ -97,7 +97,7 @@ impl Database {
         }
     }
 
-    pub fn create<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn create<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {println!("create");
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -106,7 +106,7 @@ impl Database {
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
         // wait while key is blocked
-        while (*guard).get(&key).is_some() {
+        while dbg!((*guard).get(&key).is_some()) {
             guard = condvar.wait(guard).unwrap();
         }
         // if key isn't locked, insert it into the locked set and release lock

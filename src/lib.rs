@@ -41,6 +41,15 @@ mod tests {
     }
 
     #[test]
+    fn lock_after_read() {
+        let database = Database::new();
+        Person::read(String::from("Something"), &database).expect_err("No error recieved");
+        let peter = Person::new("Hans", 42);
+        peter.create(&database).expect("Database create failed");
+        Person::delete(String::from("Hans"), &database).expect("Database delete failed");
+    }
+
+    #[test]
     fn crud_basics() {
         let database = Database::new();
         let mut peter_original = Person::new("Peter", 25);
