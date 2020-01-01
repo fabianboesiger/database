@@ -62,6 +62,7 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
     // generate implementation
     let gen = quote! {
         
+        /*
         impl #struct_name {
             fn create<'a>(&self, database: &'a Database) -> Result<(), Box<dyn std::error::Error>> {
                 database.create(self)?;
@@ -87,8 +88,17 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
                 Ok(output)
             }
         }
+        */
         
-        impl Store for #struct_name {
+        impl Store<#id_type> for #struct_name {
+
+            fn with(#id_name: #id_type) -> #struct_name {
+                #struct_name {
+                    #id_name,
+                    ..
+                    Default::default()
+                }
+            }
 
             fn name() -> Result<String, Box<dyn std::error::Error>> {
                 let name = stringify!(#struct_name);

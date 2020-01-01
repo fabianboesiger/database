@@ -60,7 +60,9 @@ impl Database {
     }
 
     /// Creates an entry in the database.
-    pub fn create<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {                
+    pub fn create<I, T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
+        where I: std::fmt::Display, T: Store<I> + Serialize
+    {                
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -77,7 +79,7 @@ impl Database {
         guard.insert(key.clone(), Operation::Write);
         drop(guard);
 
-        let output = if path.exists() {
+        let output = (|| if path.exists() {
             // return error if file exists
             Err(Box::new(Error::new("Entry already exists.")) as Box<dyn std::error::Error>)
         } else {
@@ -92,7 +94,7 @@ impl Database {
             file.flush()?;
             drop(file);
             Ok(())
-        };
+        })();
 
         // acquire lock again and remove key from blocked list
         let mut guard = lock.lock().unwrap();
@@ -104,7 +106,9 @@ impl Database {
     }
 
     /// Reads an entry from the database.
-    pub fn read<T: Store + Serialize>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>> {        
+    pub fn read<I, T>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>>
+        where I: std::fmt::Display, T: Store<I> + Serialize
+    {        
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -131,14 +135,14 @@ impl Database {
         guard.insert(key.clone(), Operation::Read(readers + 1));
         drop(guard);
 
-        let output = if !path.exists() {
+        let output = (|| if !path.exists() {
             // return error if file doesn't exist
             Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
         } else {
             // do the read
             object.deserialize(&mut fs::read(path)?);
             Ok(())
-        };
+        })();
         
         // acquire lock again and decrease readers
         let mut guard = lock.lock().unwrap();
@@ -160,8 +164,19 @@ impl Database {
         output
     }
 
+    /// Reads an entry from the database based off its ID.
+    pub fn read_id<I, T>(&self, id: I) -> Result<T, Box<dyn std::error::Error>>
+        where I: std::fmt::Display, T: Store<I> + Serialize
+    {
+        let mut object = T::with(id);
+        self.read(&mut object)?;
+        Ok(object)
+    }
+
     /// Updates an entry in the database.
-    pub fn update<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn update<I, T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
+        where I: std::fmt::Display, T: Store<I> + Serialize
+    {
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -177,7 +192,7 @@ impl Database {
         guard.insert(key.clone(), Operation::Write);
         drop(guard);
 
-        let output = if !path.exists() {
+        let output = (|| if !path.exists() {
             // return error if file doesn't exist
             Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
         } else {
@@ -192,7 +207,7 @@ impl Database {
             file.flush()?;
             drop(file);
             Ok(())
-        };
+        })();
 
         // acquire lock again and remove key from blocked list
         let mut guard = lock.lock().unwrap();
@@ -204,7 +219,9 @@ impl Database {
     }
 
     /// Deletes an entry from the database.
-    pub fn delete<T: Store + Serialize>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn delete<I, T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
+        where I: std::fmt::Display, T: Store<I> + Serialize
+    {
         let key = object.key()?;
         let path_string = format!("data/{}.bin", &key);
         let path = Path::new(&path_string);
@@ -220,14 +237,14 @@ impl Database {
         guard.insert(key.clone(), Operation::Write);
         drop(guard);
 
-        let output = if !path.exists() {
+        let output = (|| if !path.exists() {
             // return error if file doesn't exist
             Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
         } else {
             // do the delete
             fs::remove_file(path)?;
             Ok(())
-        };
+        })();
 
         // acquire lock again and remove key from blocked list
         let mut guard = lock.lock().unwrap();
@@ -236,6 +253,14 @@ impl Database {
         condvar.notify_all();
 
         output
+    }
+
+    
+    /// Deletes an entry from the database based off its ID.
+    pub fn delete_id<I, T>(&self, id: I) -> Result<(), Box<dyn std::error::Error>>
+        where I: std::fmt::Display, T: Store<I> + Serialize
+    {
+        self.delete(&T::with(id))
     }
 
 }

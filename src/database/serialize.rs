@@ -3,7 +3,7 @@ pub trait Serialize {
     fn deserialize(&mut self, _: &mut Vec<u8>);
 }
 
-macro_rules! impl_Serializable_for_int {
+macro_rules! impl_Serializable_for_primitives {
     ($($t:ty),+) => {
         $(
             impl Serialize for $t {
@@ -27,7 +27,7 @@ macro_rules! impl_Serializable_for_int {
     }
 }
 
-impl_Serializable_for_int!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
+impl_Serializable_for_primitives!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
 
 impl Serialize for bool {
     fn serialize(&self) -> Vec<u8> {
