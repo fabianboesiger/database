@@ -47,6 +47,7 @@ impl std::error::Error for Error {
 }
 
 /// The `Database` struct contains everything used for a database.
+#[derive(Default)]
 pub struct Database {
     blocked: (Mutex<HashMap<String, Operation>>, Condvar)
 }
@@ -54,9 +55,7 @@ pub struct Database {
 impl Database {
     /// Creates a new database. The data is stored in the "data" directory at the project root, which is created automatically if it doesn't exist already.
     pub fn new() -> Database {
-        Database {
-            blocked: (Mutex::new(HashMap::new()), Condvar::new())
-        }
+        Default::default()
     }
 
     /// Creates an entry in the database.
@@ -156,7 +155,7 @@ impl Database {
         if updated_readers == 0 {
             guard.remove(&key);
         } else {
-            guard.insert(key.clone(), Operation::Read(updated_readers));
+            guard.insert(key, Operation::Read(updated_readers));
         }
         drop(guard);
         condvar.notify_all();
