@@ -213,8 +213,8 @@ impl Database {
         let paths = fs::read_dir(format!("data/{}", T::name()))?;
 
         for path in paths {
+            println!("{:?}", path);
             let encoded = String::from(path?.path().into_iter().last().unwrap().to_str().unwrap());
-            println!("{}", encoded);
             result.push(self.read_encoded(encoded)?);
         }
 
