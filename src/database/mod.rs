@@ -214,6 +214,7 @@ impl Database {
 
         for path in paths {
             let encoded = String::from(path?.path().into_iter().last().unwrap().to_str().unwrap());
+            println!("{}", encoded);
             result.push(self.read_encoded(encoded)?);
         }
 
