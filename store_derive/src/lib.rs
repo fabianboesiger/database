@@ -124,8 +124,8 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
                 #name
             }
             
-            fn id(&self) -> #id_type {
-                self.#id_name.clone()
+            fn id(&self) -> &#id_type {
+                &self.#id_name
             }
             
         }

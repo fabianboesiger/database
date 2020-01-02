@@ -58,7 +58,7 @@ impl Database {
         Default::default()
     }
 
-    pub fn id<I>(id: I) -> Result<String, Box<dyn std::error::Error>>
+    pub fn id<I>(id: &I) -> Result<String, Box<dyn std::error::Error>>
         where I: Serialize
     {
         let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -199,7 +199,7 @@ impl Database {
     }
 
     /// Reads an entry from the database.
-    pub fn read<T>(&self, id: T::ID) -> Result<T, Box<dyn std::error::Error>>
+    pub fn read<T>(&self, id: &T::ID) -> Result<T, Box<dyn std::error::Error>>
         where T: Store + Serialize
     {        
         self.read_encoded(Database::id(id)?)
@@ -266,7 +266,7 @@ impl Database {
     }
 
     /// Deletes an entry from the database.
-    pub fn delete<T>(&self, id: T::ID) -> Result<(), Box<dyn std::error::Error>>
+    pub fn delete<T>(&self, id: &T::ID) -> Result<(), Box<dyn std::error::Error>>
         where T: Store + Serialize
     {
         let key = format!("{}/{}", T::name(), Database::id(id)?);

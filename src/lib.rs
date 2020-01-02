@@ -56,13 +56,13 @@ mod tests {
         let database = Database::new();
         let mut peter_original = Person::new("Peter", 25);
         database.create(&peter_original).expect("Database create failed");
-        let peter_read: Person = database.read(String::from("Peter")).expect("Database read failed");
+        let peter_read: Person = database.read(&String::from("Peter")).expect("Database read failed");
         assert_eq!(peter_read, peter_original);
         peter_original.age = 45;
         database.update(&peter_original).expect("Database update failed");
-        let peter_read: Person = database.read(String::from("Peter")).expect("Database read failed");
+        let peter_read: Person = database.read(&String::from("Peter")).expect("Database read failed");
         assert_eq!(peter_read, peter_original);
-        database.delete::<Person>(peter_original.name).expect("Database delete failed");
+        database.delete::<Person>(&peter_original.name).expect("Database delete failed");
     }
 
     #[test]
@@ -72,9 +72,9 @@ mod tests {
         database.create(&Person::new("Maria", 54)).unwrap();
         database.create(&Person::new("Josef", 51)).unwrap();
         assert_eq!(database.read_all::<Person>().unwrap().len(), 3);
-        database.delete::<Person>(String::from("Jakob")).unwrap();
-        database.delete::<Person>(String::from("Maria")).unwrap();
-        database.delete::<Person>(String::from("Josef")).unwrap();
+        database.delete::<Person>(&String::from("Jakob")).unwrap();
+        database.delete::<Person>(&String::from("Maria")).unwrap();
+        database.delete::<Person>(&String::from("Josef")).unwrap();
     }
 
     /*
@@ -112,9 +112,9 @@ mod tests {
                     for k in 0..repetitions {
                         let mut number = Number::new(j as u32 * repetitions + k as u32);
                         db.create(&number).expect("Database create failed");
-                        number = db.read(number.id).expect("Database read failed");
+                        number = db.read(&number.id).expect("Database read failed");
                         db.update(&number).expect("Database update failed");
-                        db.delete::<Number>(number.id).expect("Database delete failed");
+                        db.delete::<Number>(&number.id).expect("Database delete failed");
                     }
                 }));
             }
