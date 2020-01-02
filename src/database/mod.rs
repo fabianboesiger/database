@@ -210,12 +210,12 @@ impl Database {
         where T: Store + Serialize
     {
         let mut result = Vec::new();
-        let paths = fs::read_dir(format!("data/{}", T::name()))?;
-
-        for path in paths {
-            println!("{:?}", path);
-            let encoded = String::from(path?.path().into_iter().last().unwrap().to_str().unwrap());
-            result.push(self.read_encoded(encoded)?);
+        match fs::read_dir(format!("data/{}", T::name())) {
+            Ok(paths) => for path in paths {
+                let encoded = String::from(path?.path().into_iter().last().unwrap().to_str().unwrap());
+                result.push(self.read_encoded(encoded)?);
+            },
+            Err(_) => {}
         }
 
         Ok(result)
