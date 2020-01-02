@@ -58,12 +58,49 @@ impl Database {
         Default::default()
     }
 
+    pub fn id<I>(id: I) -> Result<String, Box<dyn std::error::Error>>
+        where I: Serialize
+    {
+        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut output = String::new();
+        let mut sextets = Vec::<u8>::new();
+        let bytes = id.serialize();
+        
+        for (i, &byte) in bytes.iter().enumerate() {
+            match i % 3 {
+                0 => {
+                    sextets.push(byte & 0b00111111);
+                    sextets.push((byte & 0b11000000) >> 6);
+                },
+                1 => {
+                    let last = sextets.pop().unwrap();
+                    sextets.push(last | ((byte & 0b00001111) << 2));
+                    sextets.push((byte & 0b11110000) >> 4);
+                },
+                2 => {
+                    let last = sextets.pop().unwrap();
+                    sextets.push(last | ((byte & 0b00000011) << 4));
+                    sextets.push((byte & 0b11111100) >> 2);
+                },
+                _ => unreachable!()
+            }
+        };
+        if sextets.len() > 128 {
+            return Err(Box::new(Error::new("ID exceeds maximum length.")) as Box<dyn std::error::Error>);
+        }
+        for &sextet in &sextets {
+            output.push(alphabet.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
+        }
+
+        Ok(output)
+    }
+
     /// Creates an entry in the database.
-    pub fn create<I, T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
-        where I: std::fmt::Display, T: Store<I> + Serialize
+    pub fn create<T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
+        where T: Store + Serialize
     {                
-        let key = object.key()?;
-        let path_string = format!("data/{}.bin", &key);
+        let key = format!("{}/{}", T::name(), Database::id(object.id())?);
+        let path_string = format!("data/{}", &key);
         let path = Path::new(&path_string);
 
         // acquire lock
@@ -83,7 +120,7 @@ impl Database {
             Err(Box::new(Error::new("Entry already exists.")) as Box<dyn std::error::Error>)
         } else {
             // do the create
-            let directory_string = format!("data/{}", T::name()?);
+            let directory_string = format!("data/{}", T::name());
             let directory = Path::new(&directory_string);
             if !directory.exists() {
                 fs::create_dir_all(directory)?;
@@ -104,12 +141,11 @@ impl Database {
         output
     }
 
-    /// Reads an entry from the database.
-    pub fn read<I, T>(&self, object: &mut T) -> Result<(), Box<dyn std::error::Error>>
-        where I: std::fmt::Display, T: Store<I> + Serialize
+    fn read_encoded<T>(&self, encoded: String) -> Result<T, Box<dyn std::error::Error>>
+        where T: Store + Serialize
     {        
-        let key = object.key()?;
-        let path_string = format!("data/{}.bin", &key);
+        let key = format!("{}/{}", T::name(), encoded);
+        let path_string = format!("data/{}", &key);
         let path = Path::new(&path_string);
 
         // acquire lock
@@ -139,8 +175,7 @@ impl Database {
             Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
         } else {
             // do the read
-            object.deserialize(&mut fs::read(path)?);
-            Ok(())
+            Ok(T::deserialize(&mut fs::read(path)?))
         })();
         
         // acquire lock again and decrease readers
@@ -163,21 +198,34 @@ impl Database {
         output
     }
 
-    /// Reads an entry from the database based off its ID.
-    pub fn read_id<I, T>(&self, id: I) -> Result<T, Box<dyn std::error::Error>>
-        where I: std::fmt::Display, T: Store<I> + Serialize
-    {
-        let mut object = T::with(id);
-        self.read(&mut object)?;
-        Ok(object)
+    /// Reads an entry from the database.
+    pub fn read<T>(&self, id: T::ID) -> Result<T, Box<dyn std::error::Error>>
+        where T: Store + Serialize
+    {        
+        self.read_encoded(Database::id(id)?)
     }
 
-    /// Updates an entry in the database.
-    pub fn update<I, T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
-        where I: std::fmt::Display, T: Store<I> + Serialize
+    /// Reads all entries from the database
+    pub fn read_all<T>(&self) -> Result<Vec<T>, Box<dyn std::error::Error>>
+        where T: Store + Serialize
     {
-        let key = object.key()?;
-        let path_string = format!("data/{}.bin", &key);
+        let mut result = Vec::new();
+        let paths = fs::read_dir(format!("data/{}", T::name()))?;
+
+        for path in paths {
+            let encoded = String::from(path?.path().into_iter().last().unwrap().to_str().unwrap());
+            result.push(self.read_encoded(encoded)?);
+        }
+
+        Ok(result)
+    }
+    
+    /// Updates an entry in the database.
+    pub fn update<T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
+        where T: Store + Serialize
+    {
+        let key = format!("{}/{}", T::name(), Database::id(object.id())?);
+        let path_string = format!("data/{}", &key);
         let path = Path::new(&path_string);
 
         // acquire lock
@@ -196,7 +244,7 @@ impl Database {
             Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
         } else {
             // do the update
-            let directory_string = format!("data/{}", T::name()?);
+            let directory_string = format!("data/{}", T::name());
             let directory = Path::new(&directory_string);
             if !directory.exists() {
                 fs::create_dir_all(directory)?;
@@ -218,11 +266,11 @@ impl Database {
     }
 
     /// Deletes an entry from the database.
-    pub fn delete<I, T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
-        where I: std::fmt::Display, T: Store<I> + Serialize
+    pub fn delete<T>(&self, id: T::ID) -> Result<(), Box<dyn std::error::Error>>
+        where T: Store + Serialize
     {
-        let key = object.key()?;
-        let path_string = format!("data/{}.bin", &key);
+        let key = format!("{}/{}", T::name(), Database::id(id)?);
+        let path_string = format!("data/{}", &key);
         let path = Path::new(&path_string);
 
         // acquire lock
@@ -252,14 +300,6 @@ impl Database {
         condvar.notify_all();
 
         output
-    }
-
-    
-    /// Deletes an entry from the database based off its ID.
-    pub fn delete_id<I, T>(&self, id: I) -> Result<(), Box<dyn std::error::Error>>
-        where I: std::fmt::Display, T: Store<I> + Serialize
-    {
-        self.delete(&T::with(id))
     }
 
 }

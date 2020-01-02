@@ -1,6 +1,6 @@
 pub trait Serialize {
     fn serialize(&self) -> Vec<u8>;
-    fn deserialize(&mut self, _: &mut Vec<u8>);
+    fn deserialize(_: &mut Vec<u8>) -> Self;
 }
 
 macro_rules! impl_Serializable_for_primitives {
@@ -13,14 +13,14 @@ macro_rules! impl_Serializable_for_primitives {
                     bytes
                 }
 
-                fn deserialize(&mut self, bytes: &mut Vec<u8>) {
+                fn deserialize(bytes: &mut Vec<u8>) -> $t {
                     const SIZE: usize = std::mem::size_of::<$t>();
                     let mut my_bytes = [0; SIZE];
                     for i in 0..SIZE {
                         let byte = bytes.pop().unwrap();
                         my_bytes[i] = byte;
                     }
-                    *self = <$t>::from_le_bytes(my_bytes);
+                    <$t>::from_le_bytes(my_bytes)
                 }
             }
         )*
@@ -36,8 +36,8 @@ impl Serialize for bool {
         bytes
     }
 
-    fn deserialize(&mut self, bytes: &mut Vec<u8>) {
-        *self = bytes.pop().unwrap() == 1;
+    fn deserialize(bytes: &mut Vec<u8>) -> bool {
+        bytes.pop().unwrap() == 1
     }
 }
 
@@ -51,14 +51,13 @@ impl<S: Serialize + Default> Serialize for Vec<S> {
         bytes
     }
 
-    fn deserialize(&mut self, bytes: &mut Vec<u8>) {
-        let mut size: u64 = 0;
-        size.deserialize(bytes);
+    fn deserialize(bytes: &mut Vec<u8>) -> Vec<S> {
+        let mut output = Vec::new();
+        let size = u64::deserialize(bytes);
         for _ in 0..size {
-            let mut element = S::default();
-            element.deserialize(bytes);
-            self.push(element);
+            output.push(S::deserialize(bytes));
         }
+        output
     }
 }
 
@@ -69,7 +68,7 @@ impl Serialize for String {
         bytes
     }
 
-    fn deserialize(&mut self, bytes: &mut Vec<u8>) {
+    fn deserialize(bytes: &mut Vec<u8>) -> String {
         let mut my_bytes = Vec::new();
         loop {
             let byte = bytes.pop().unwrap();
@@ -78,6 +77,6 @@ impl Serialize for String {
             }
             my_bytes.push(byte);
         }
-        *self = String::from(std::str::from_utf8(&my_bytes).unwrap());
+        String::from(std::str::from_utf8(&my_bytes).unwrap())
     }
 }

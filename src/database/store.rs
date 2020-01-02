@@ -1,8 +1,8 @@
 use super::Serialize;
 
-pub trait Store<I>: Serialize + Default where I: std::fmt::Display {
-    fn with(_: I) -> Self;
-    fn name() -> Result<String, Box<dyn std::error::Error>>;
-    fn id(&self) -> Result<String, Box<dyn std::error::Error>>;
-    fn key(&self) -> Result<String, Box<dyn std::error::Error>>;
+pub trait Store: Serialize + Default {
+    type ID: Serialize + std::fmt::Display;
+
+    fn name() -> &'static str;
+    fn id(&self) -> Self::ID;
 }

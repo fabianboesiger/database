@@ -59,9 +59,28 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
         panic!("Storable structs without id are not allowed");
     }
 
+    let name = format!("{}", struct_name);
+    if name.len() > 128 {
+        panic!("Name exceeds maximum length.");
+    }
+    let name = format!("{}s", 
+        name
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                let mut output = Vec::new();
+                if i > 0 && c.is_ascii_uppercase() {
+                    output.push('-');
+                }
+                output.push(c.to_ascii_lowercase());
+                output
+            })
+            .flatten()
+            .collect::<String>()
+    );
+
     // generate implementation
     let gen = quote! {
-        
         /*
         impl #struct_name {
             fn create<'a>(&self, database: &'a Database) -> Result<(), Box<dyn std::error::Error>> {
@@ -90,8 +109,9 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
         }
         */
         
-        impl Store<#id_type> for #struct_name {
-
+        impl Store for #struct_name {
+            type ID = #id_type;
+            /*
             fn with(#id_name: #id_type) -> #struct_name {
                 #struct_name {
                     #id_name,
@@ -99,68 +119,15 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
                     Default::default()
                 }
             }
-
-            fn name() -> Result<String, Box<dyn std::error::Error>> {
-                let name = stringify!(#struct_name);
-                if name.len() > 128 {
-                    return Err(Box::new(Error::new("Name exceeds maximum length.")) as Box<dyn std::error::Error>);
-                }
-                Ok(format!("{}", 
-                    name
-                        .chars()
-                        .enumerate()
-                        .map(|(i, c)| {
-                            let mut output = Vec::new();
-                            if i > 0 && c.is_ascii_uppercase() {
-                                output.push('-');
-                            }
-                            output.push(c.to_ascii_lowercase());
-                            output
-                        })
-                        .flatten()
-                        .collect::<String>()
-                ))
+            */
+            fn name() -> &'static str {
+                #name
             }
-    
-            fn id(&self) -> Result<String, Box<dyn std::error::Error>> {
-                let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-                let mut output = String::new();
-                let mut sextets = Vec::<u8>::new();
-                let bytes = self.#id_name.serialize();
-                
-                for (i, &byte) in bytes.iter().enumerate() {
-                    match i % 3 {
-                        0 => {
-                            sextets.push(byte & 0b00111111);
-                            sextets.push((byte & 0b11000000) >> 6);
-                        },
-                        1 => {
-                            let last = sextets.pop().unwrap();
-                            sextets.push(last | ((byte & 0b00001111) << 2));
-                            sextets.push((byte & 0b11110000) >> 4);
-                        },
-                        2 => {
-                            let last = sextets.pop().unwrap();
-                            sextets.push(last | ((byte & 0b00000011) << 4));
-                            sextets.push((byte & 0b11111100) >> 2);
-                        },
-                        _ => unreachable!()
-                    }
-                };
-                if sextets.len() > 128 {
-                    return Err(Box::new(Error::new("ID exceeds maximum length.")) as Box<dyn std::error::Error>);
-                }
-                for &sextet in &sextets {
-                    output.push(alphabet.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
-                }
-
-                Ok(output)
+            
+            fn id(&self) -> #id_type {
+                self.#id_name.clone()
             }
-
-            fn key(&self) -> Result<String, Box<dyn std::error::Error>> {
-                Ok(format!("{}/{}", #struct_name::name()?, self.id()?))
-            }
-
+            
         }
     };
     gen.into()
