@@ -71,11 +71,15 @@ impl Serialize for String {
     fn deserialize(bytes: &mut Vec<u8>) -> String {
         let mut my_bytes = Vec::new();
         loop {
-            let byte = bytes.pop().unwrap();
-            if byte == b'\0' {
-                break;
+            match bytes.pop() {
+                Some(byte) => {
+                    if byte == b'\0' {
+                        break;
+                    }
+                    my_bytes.push(byte);
+                },
+                None => { break; }
             }
-            my_bytes.push(byte);
         }
         String::from(std::str::from_utf8(&my_bytes).unwrap())
     }
