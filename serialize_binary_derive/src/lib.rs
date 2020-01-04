@@ -5,7 +5,7 @@ use quote::quote;
 use syn;
 use syn::{Data, Fields, Type};
 
-#[proc_macro_derive(Serialize)]
+#[proc_macro_derive(SerializeBinary)]
 pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_serialize(&ast)
@@ -37,7 +37,7 @@ fn impl_serialize(ast: &syn::DeriveInput) -> TokenStream {
     };
 
     let gen = quote! {
-        impl Serialize for #struct_name {
+        impl SerializeBinary for #struct_name {
             fn serialize(&self) -> Vec<u8> {
                 let mut bytes = Vec::new();
                 #(

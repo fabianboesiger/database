@@ -1,7 +1,7 @@
-use super::Serialize;
+use super::SerializeBinary;
 
-pub trait Store: Serialize + Default + Send + Sync {
-    type ID: Serialize + std::fmt::Display + Send + Sync;
+pub trait Store: SerializeBinary + Default + Send + Sync {
+    type ID: SerializeBinary + std::fmt::Display + Send + Sync;
 
     fn name() -> &'static str;
     fn id(&self) -> &Self::ID;

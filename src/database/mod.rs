@@ -1,10 +1,10 @@
 mod store;
-mod serialize;
+mod serialize_binary;
 
 pub use store::Store;
-pub use serialize::Serialize;
+pub use serialize_binary::SerializeBinary;
 pub use store_derive::Store;
-pub use serialize_derive::Serialize;
+pub use serialize_binary_derive::SerializeBinary;
 use std::fmt;
 use std::path::Path;
 use std::fs;
@@ -59,7 +59,7 @@ impl Database {
     }
 
     pub fn id<I>(id: &I) -> Result<String, Box<dyn std::error::Error>>
-        where I: Serialize
+        where I: SerializeBinary
     {
         let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut output = String::new();
@@ -97,7 +97,7 @@ impl Database {
 
     /// Creates an entry in the database.
     pub fn create<T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
-        where T: Store + Serialize
+        where T: Store + SerializeBinary
     {                
         let key = format!("{}/{}", T::name(), Database::id(object.id())?);
         let path_string = format!("data/{}", &key);
@@ -142,7 +142,7 @@ impl Database {
     }
 
     fn read_encoded<T>(&self, encoded: String) -> Result<T, Box<dyn std::error::Error>>
-        where T: Store + Serialize
+        where T: Store + SerializeBinary
     {        
         let key = format!("{}/{}", T::name(), encoded);
         let path_string = format!("data/{}", &key);
@@ -200,14 +200,14 @@ impl Database {
 
     /// Reads an entry from the database.
     pub fn read<T>(&self, id: &T::ID) -> Result<T, Box<dyn std::error::Error>>
-        where T: Store + Serialize
+        where T: Store + SerializeBinary
     {        
         self.read_encoded(Database::id(id)?)
     }
 
     /// Reads all entries from the database
     pub fn read_all<T>(&self) -> Result<Vec<T>, Box<dyn std::error::Error>>
-        where T: Store + Serialize
+        where T: Store + SerializeBinary
     {
         let mut result = Vec::new();
         match fs::read_dir(format!("data/{}", T::name())) {
@@ -223,7 +223,7 @@ impl Database {
     
     /// Updates an entry in the database.
     pub fn update<T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
-        where T: Store + Serialize
+        where T: Store + SerializeBinary
     {
         let key = format!("{}/{}", T::name(), Database::id(object.id())?);
         let path_string = format!("data/{}", &key);
@@ -268,7 +268,7 @@ impl Database {
 
     /// Deletes an entry from the database.
     pub fn delete<T>(&self, id: &T::ID) -> Result<(), Box<dyn std::error::Error>>
-        where T: Store + Serialize
+        where T: Store + SerializeBinary
     {
         let key = format!("{}/{}", T::name(), Database::id(id)?);
         let path_string = format!("data/{}", &key);

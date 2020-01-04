@@ -5,5 +5,5 @@ authors = ["fabianboesiger <boesiger.fabian@outlook.com>"]
 edition = "2018"
 
 [dependencies]
-serialize_derive = { path = "serialize_derive" }
+serialize_binary_derive = { path = "serialize_binary_derive" }
 store_derive = { path = "store_derive" }

@@ -1,14 +1,14 @@
 mod database;
-pub use crate::database::{Database, Store, Serialize, Error};
+pub use crate::database::{Database, Store, SerializeBinary, Error};
 
 #[cfg(test)]
 mod tests {
-    use super::{Database, Store, Serialize};
+    use super::{Database, Store, SerializeBinary};
     use std::thread;
     use std::sync::Arc;
     use std::time::Instant;
 
-    #[derive(Serialize, Store, Default, PartialEq, Debug)]
+    #[derive(SerializeBinary, Store, Default, PartialEq, Debug)]
     struct Person {
         #[id] name: String,
         age: u16,
@@ -27,7 +27,7 @@ mod tests {
         }
     }
 
-    #[derive(Serialize, Store, Default)]
+    #[derive(SerializeBinary, Store, Default)]
     struct Number {
         #[id] id: u32
     }
