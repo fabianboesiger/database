@@ -3,7 +3,7 @@ pub trait SerializeBinary {
     fn deserialize(_: &mut Vec<u8>) -> Self;
 }
 
-macro_rules! impl_Serializable_for_primitives {
+macro_rules! impl_SerializeBinary_for_primitives {
     ($($t:ty),+) => {
         $(
             impl SerializeBinary for $t {
@@ -27,7 +27,7 @@ macro_rules! impl_Serializable_for_primitives {
     }
 }
 
-impl_Serializable_for_primitives!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
+impl_SerializeBinary_for_primitives!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
 
 impl SerializeBinary for bool {
     fn serialize(&self) -> Vec<u8> {
@@ -41,7 +41,7 @@ impl SerializeBinary for bool {
     }
 }
 
-impl<S: SerializeBinary + Default> SerializeBinary for Vec<S> {
+impl<S: SerializeBinary> SerializeBinary for Vec<S> {
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.append(&mut (self.len() as u64).serialize());

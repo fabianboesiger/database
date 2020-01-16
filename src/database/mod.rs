@@ -1,12 +1,13 @@
 mod store;
 mod serialize_binary;
+mod error;
 
 pub use store::Store;
 pub use serialize_binary::SerializeBinary;
 pub use store_derive::Store;
 pub use serialize_binary_derive::SerializeBinary;
-use std::fmt;
-use std::path::Path;
+pub use error::Error;
+use std::path::{Path, PathBuf};
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -14,6 +15,7 @@ use std::io::prelude::*;
 use std::sync::Mutex;
 use std::sync::Condvar;
 use std::collections::HashMap;
+use std::fmt;
 
 #[derive(Debug)]
 enum Operation {
@@ -21,45 +23,25 @@ enum Operation {
     Read(u32)
 }
 
-#[derive(Debug)]
-pub struct Error {
-    description: &'static str
-}
-
-impl Error {
-    pub fn new(description: &'static str) -> Error {
-        Error {
-            description
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.description)
-    }
-}
-
-impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        self.description
-    }
-}
-
 /// The `Database` struct contains everything used for a database.
-#[derive(Default)]
 pub struct Database {
+    path: PathBuf,
     blocked: (Mutex<HashMap<String, Operation>>, Condvar)
 }
 
 impl Database {
     /// Creates a new database. The data is stored in the "data" directory at the project root, which is created automatically if it doesn't exist already.
-    pub fn new() -> Database {
-        Default::default()
+    pub fn new<P>(path: P) -> Database
+        where P: AsRef<Path>
+    {
+        Database {
+            path: path.as_ref().to_path_buf(),
+            blocked: Default::default()
+        }
     }
 
-    pub fn id<I>(id: &I) -> Result<String, Box<dyn std::error::Error>>
-        where I: SerializeBinary
+    pub fn id<I>(id: &I) -> Result<String, Error>
+        where I: SerializeBinary + fmt::Display
     {
         let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut output = String::new();
@@ -86,7 +68,7 @@ impl Database {
             }
         };
         if sextets.len() > 128 {
-            return Err(Box::new(Error::new("ID exceeds maximum length.")) as Box<dyn std::error::Error>);
+            return Err(Error::new(format!("ID \"{}\" exceeds maximum length", id)));
         }
         for &sextet in &sextets {
             output.push(alphabet.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
@@ -96,12 +78,13 @@ impl Database {
     }
 
     /// Creates an entry in the database.
-    pub fn create<T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
+    pub fn create<T>(&self, object: &T) -> Result<(), Error>
         where T: Store + SerializeBinary
-    {                
+    {           
         let key = format!("{}/{}", T::name(), Database::id(object.id())?);
-        let path_string = format!("data/{}", &key);
-        let path = Path::new(&path_string);
+        let path = self.path.clone().join(&key);
+        let mut directory = path.clone();
+        directory.pop();
 
         // acquire lock
         let (lock, condvar) = &self.blocked;
@@ -117,18 +100,15 @@ impl Database {
 
         let output = (|| if path.exists() {
             // return error if file exists
-            Err(Box::new(Error::new("Entry already exists.")) as Box<dyn std::error::Error>)
+            Err(Error::new(format!("Entry \"{}\" already exists", key)))
         } else {
             // do the create
-            let directory_string = format!("data/{}", T::name());
-            let directory = Path::new(&directory_string);
             if !directory.exists() {
                 fs::create_dir_all(directory)?;
             }
             let mut file = File::create(path)?;
             file.write_all(&object.serialize())?;
             file.flush()?;
-            drop(file);
             Ok(())
         })();
 
@@ -141,12 +121,11 @@ impl Database {
         output
     }
 
-    fn read_encoded<T>(&self, encoded: String) -> Result<T, Box<dyn std::error::Error>>
+    fn read_encoded<T>(&self, encoded: String) -> Result<T, Error>
         where T: Store + SerializeBinary
     {        
         let key = format!("{}/{}", T::name(), encoded);
-        let path_string = format!("data/{}", &key);
-        let path = Path::new(&path_string);
+        let path = self.path.clone().join(&key);
 
         // acquire lock
         let (lock, condvar) = &self.blocked;
@@ -172,7 +151,7 @@ impl Database {
 
         let output = (|| if !path.exists() {
             // return error if file doesn't exist
-            Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
+            Err(Error::new(format!("Entry \"{}\" doesn't exist", key)))
         } else {
             // do the read
             Ok(T::deserialize(&mut fs::read(path)?))
@@ -199,14 +178,14 @@ impl Database {
     }
 
     /// Reads an entry from the database.
-    pub fn read<T>(&self, id: &T::ID) -> Result<T, Box<dyn std::error::Error>>
+    pub fn read<T>(&self, id: &T::ID) -> Result<T, Error>
         where T: Store + SerializeBinary
     {        
         self.read_encoded(Database::id(id)?)
     }
 
     /// Reads all entries from the database
-    pub fn read_all<T>(&self) -> Result<Vec<T>, Box<dyn std::error::Error>>
+    pub fn read_all<T>(&self) -> Result<Vec<T>, Error>
         where T: Store + SerializeBinary
     {
         let mut result = Vec::new();
@@ -222,12 +201,13 @@ impl Database {
     }
     
     /// Updates an entry in the database.
-    pub fn update<T>(&self, object: &T) -> Result<(), Box<dyn std::error::Error>>
+    pub fn update<T>(&self, object: &T) -> Result<(), Error>
         where T: Store + SerializeBinary
     {
         let key = format!("{}/{}", T::name(), Database::id(object.id())?);
-        let path_string = format!("data/{}", &key);
-        let path = Path::new(&path_string);
+        let path = self.path.clone().join(&key);
+        let mut directory = path.clone();
+        directory.pop();
 
         // acquire lock
         let (lock, condvar) = &self.blocked;
@@ -242,18 +222,15 @@ impl Database {
 
         let output = (|| if !path.exists() {
             // return error if file doesn't exist
-            Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
+            Err(Error::new(format!("Entry \"{}\" doesn't exist", key)))
         } else {
             // do the update
-            let directory_string = format!("data/{}", T::name());
-            let directory = Path::new(&directory_string);
             if !directory.exists() {
                 fs::create_dir_all(directory)?;
             }
             let mut file = OpenOptions::new().write(true).open(path)?;
             file.write_all(&object.serialize())?;
             file.flush()?;
-            drop(file);
             Ok(())
         })();
 
@@ -267,12 +244,11 @@ impl Database {
     }
 
     /// Deletes an entry from the database.
-    pub fn delete<T>(&self, id: &T::ID) -> Result<(), Box<dyn std::error::Error>>
+    pub fn delete<T>(&self, id: &T::ID) -> Result<(), Error>
         where T: Store + SerializeBinary
     {
         let key = format!("{}/{}", T::name(), Database::id(id)?);
-        let path_string = format!("data/{}", &key);
-        let path = Path::new(&path_string);
+        let path = self.path.clone().join(&key);
 
         // acquire lock
         let (lock, condvar) = &self.blocked;
@@ -287,7 +263,7 @@ impl Database {
 
         let output = (|| if !path.exists() {
             // return error if file doesn't exist
-            Err(Box::new(Error::new("Entry doesn't exist.")) as Box<dyn std::error::Error>)
+            Err(Error::new(format!("Entry \"{}\" doesn't exist", key)))
         } else {
             // do the delete
             fs::remove_file(path)?;

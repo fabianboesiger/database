@@ -81,45 +81,9 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
 
     // generate implementation
     let gen = quote! {
-        /*
-        impl #struct_name {
-            fn create<'a>(&self, database: &'a Database) -> Result<(), Box<dyn std::error::Error>> {
-                database.create(self)?;
-                Ok(())
-            }
-
-            fn update<'a>(&self, database: &'a Database) -> Result<(), Box<dyn std::error::Error>> {
-                database.update(self)?;
-                Ok(())
-            }
-
-            fn read<'a>(id: #id_type, database: &'a Database) -> Result<#struct_name, Box<dyn std::error::Error>> {
-                let mut output = Self::default();
-                output.#id_name = id;
-                database.read(&mut output)?;
-                Ok(output)
-            }
-
-            fn delete<'a>(id: #id_type, database: &'a Database) -> Result<#struct_name, Box<dyn std::error::Error>> {
-                let mut output = Self::default();
-                output.#id_name = id;
-                database.delete(&output)?;
-                Ok(output)
-            }
-        }
-        */
-        
         impl Store for #struct_name {
             type ID = #id_type;
-            /*
-            fn with(#id_name: #id_type) -> #struct_name {
-                #struct_name {
-                    #id_name,
-                    ..
-                    Default::default()
-                }
-            }
-            */
+
             fn name() -> &'static str {
                 #name
             }

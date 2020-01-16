@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn crud_basics() {
-        let database = Database::new();
+        let database = Database::new("data");
         let mut peter_original = Person::new("Peter", 25);
         database.create(&peter_original).expect("Database create failed");
         let peter_read: Person = database.read(&String::from("Peter")).expect("Database read failed");
@@ -67,7 +67,7 @@ mod tests {
 
     #[test]
     fn read_all() {
-        let database = Database::new();
+        let database = Database::new("data");
         database.create(&Person::new("Jakob", 56)).unwrap();
         database.create(&Person::new("Maria", 54)).unwrap();
         database.create(&Person::new("Josef", 51)).unwrap();
@@ -100,7 +100,7 @@ mod tests {
     
     #[test]
     fn crud_thread_times() {
-        let database = Arc::new(Database::new());
+        let database = Arc::new(Database::new("data"));
         for i in 0..6 {
             let amount = (2 as u32).pow(i);
             let repetitions = 128 as u32 / amount;
