@@ -25,7 +25,7 @@ impl error::Error for Error {
     }
 }
 
-impl<'a> From<io::Error> for Error {
+impl From<io::Error> for Error {
     fn from(error: io::Error) -> Error {
         Error::new(format!("IO Error: {}", error))
     }
