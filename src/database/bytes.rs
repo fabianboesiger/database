@@ -1,4 +1,4 @@
-pub trait SerializeBinary {
+pub trait Bytes {
     fn serialize(&self) -> Vec<u8>;
     fn deserialize(_: &mut Vec<u8>) -> Self;
 }
@@ -6,7 +6,7 @@ pub trait SerializeBinary {
 macro_rules! impl_SerializeBinary_for_primitives {
     ($($t:ty),+) => {
         $(
-            impl SerializeBinary for $t {
+            impl Bytes for $t {
                 fn serialize(&self) -> Vec<u8> {
                     let mut bytes = Vec::new();
                     bytes.extend_from_slice(&self.to_le_bytes()[..]);
@@ -29,7 +29,7 @@ macro_rules! impl_SerializeBinary_for_primitives {
 
 impl_SerializeBinary_for_primitives!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
 
-impl SerializeBinary for bool {
+impl Bytes for bool {
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.push(if *self { 1 } else { 0 });
@@ -41,7 +41,7 @@ impl SerializeBinary for bool {
     }
 }
 
-impl<S: SerializeBinary> SerializeBinary for Vec<S> {
+impl<S: Bytes> Bytes for Vec<S> {
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.append(&mut (self.len() as u64).serialize());
@@ -61,7 +61,7 @@ impl<S: SerializeBinary> SerializeBinary for Vec<S> {
     }
 }
 
-impl SerializeBinary for String {
+impl Bytes for String {
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(format!("{}\0", self).as_bytes());

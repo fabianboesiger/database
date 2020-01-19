@@ -3,49 +3,73 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn;
-use syn::Data;
-use syn::Fields;
-use syn::Type;
+use syn::{Data, Fields, Type, Meta, NestedMeta};
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
 
-#[proc_macro_derive(Store, attributes(id))]
+#[proc_macro_derive(Store, attributes(store))]
 pub fn store_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_store(&ast)
+}
+
+fn contains_name(nested: &Punctuated<NestedMeta, Comma>, name: &str) -> bool {
+    for nested_meta in nested.clone() {
+        if let NestedMeta::Meta(meta) = nested_meta {
+            if let Meta::Path(path) = meta {
+                if path.is_ident(name) {
+                    return true;
+                }
+            } 
+        }
+    }
+    false
 }
 
 fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
     // find struct name
     let struct_name = &ast.ident;
     // find id name and type
-    let (id_name, id_type) = match *&ast.data {
+
+    let (id_name, id_type, id_auto) = match *&ast.data {
         Data::Struct(ref data) => {
             match data.fields {
                 Fields::Named(ref fields) => {
                     let mut id_name = Option::None;
                     let mut id_type = Option::None;
+                    let mut id_auto = false;
                     for field in &fields.named {
-                        // check if id attribute is set
-                        let mut is_id = false;
-                        for attribute in &field.attrs {
-                            if attribute.path.is_ident("id") {
-                                if is_id {
-                                    panic!("The id attribute can only be defined once");
+                        let nested = 
+                            if let Meta::List(meta_list) = 
+                                if let Some(some) = field.attrs
+                                    .clone()
+                                    .into_iter()
+                                    .filter(|attr| attr.path.is_ident("store"))
+                                    .nth(0)
+                                {
+                                    some
+                                        .parse_meta()
+                                        .unwrap()
+                                } else {
+                                    continue;
                                 }
-                                is_id = true;
-                                break;
-                            }
-                        };
+                            { meta_list.nested } else { panic!() };
 
                         if let Some(field_name) = &field.ident {
                             if let Type::Path(tp) =  &field.ty {
-                                if is_id {
+                                if contains_name(&nested, "id") {
                                     id_name = Some(field_name);
                                     id_type = Some(&tp.path);
+                                    
+                                    if contains_name(&nested, "auto") {
+                                        id_auto = true;
+                                    }
+                                    
                                 }
                             }
                         }
                     }
-                    (id_name, id_type)
+                    (id_name, id_type, id_auto)
                 },
                 Fields::Unnamed(_) => unimplemented!(),
                 Fields::Unit => unimplemented!()
@@ -78,21 +102,40 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
             .flatten()
             .collect::<String>()
     );
-
     // generate implementation
-    let gen = quote! {
-        impl Store for #struct_name {
-            type ID = #id_type;
+    let gen = if !id_auto {
+        quote! {
+            impl Store for #struct_name {
+                type Id = #id_type;
 
-            fn name() -> &'static str {
-                #name
+                fn name() -> &'static str {
+                    #name
+                }
+                
+                fn id(&self) -> &#id_type {
+                    &self.#id_name
+                }
             }
-            
-            fn id(&self) -> &#id_type {
-                &self.#id_name
+        }
+    } else {
+        quote! {
+            impl Store for #struct_name {
+                type Id = #id_type;
+
+                fn name() -> &'static str {
+                    #name
+                }
+                
+                fn id(&self) -> &#id_type {
+                    &self.#id_name
+                }
             }
-            
+
+            impl crate::Auto for #struct_name {
+                type Count = #id_type;
+            }
         }
     };
+
     gen.into()
 }

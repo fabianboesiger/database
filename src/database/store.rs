@@ -1,8 +1,12 @@
-use super::SerializeBinary;
+use super::{Bytes, Count};
 
-pub trait Store: SerializeBinary + Send + Sync {
-    type ID: SerializeBinary + std::fmt::Display + Send + Sync;
+pub trait Store: Bytes + Send + Sync {
+    type Id: Bytes + Send + Sync;
 
     fn name() -> &'static str;
-    fn id(&self) -> &Self::ID;
+    fn id(&self) -> &Self::Id;
+}
+
+pub trait Auto: Store where <Self as Auto>::Count: Into<<Self as Store>::Id> {
+    type Count: Bytes + Send + Sync + Count;
 }

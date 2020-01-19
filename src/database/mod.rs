@@ -1,11 +1,13 @@
 mod store;
-mod serialize_binary;
+mod bytes;
+mod count;
 mod error;
 
-pub use store::Store;
-pub use serialize_binary::SerializeBinary;
+pub use store::{Store, Auto};
+pub use bytes::Bytes;
+pub use count::Count;
 pub use store_derive::Store;
-pub use serialize_binary_derive::SerializeBinary;
+pub use bytes_derive::Bytes;
 pub use error::Error;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -15,7 +17,6 @@ use std::io::prelude::*;
 use std::sync::Mutex;
 use std::sync::Condvar;
 use std::collections::HashMap;
-use std::fmt;
 
 #[derive(Debug)]
 enum Operation {
@@ -39,9 +40,28 @@ impl Database {
             blocked: Default::default()
         }
     }
-
-    pub fn id<I>(id: &I) -> Result<String, Error>
-        where I: SerializeBinary + fmt::Display
+    
+    /*
+    fn next_id<T, I: Bytes + Count + Default>(&self) -> I
+        where T: Store
+    {
+        let mut output = Default::default();
+        if let Ok(paths) = std::fs::read_dir(self.path.clone().join(T::name())) {
+            for path in paths {
+                let encoded = String::from(path.unwrap().path().into_iter().last().unwrap().to_str().unwrap());
+                let value = Database::decode::<I>(&encoded).unwrap();
+                if value >= output {
+                    output = value.next();
+                }
+            }
+        }
+        output
+    }
+    */
+    
+    /// Encode id into URL-save Base64.
+    pub fn encode<I>(id: &I) -> Result<String, Error>
+        where I: Bytes
     {
         let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut output = String::new();
@@ -68,7 +88,7 @@ impl Database {
             }
         };
         if sextets.len() > 128 {
-            return Err(Error::new(format!("ID \"{}\" exceeds maximum length", id)));
+            return Err(Error::new(format!("Id exceeds maximum length")));
         }
         for &sextet in &sextets {
             output.push(alphabet.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
@@ -76,12 +96,78 @@ impl Database {
 
         Ok(output)
     }
+    
+    /// Decode URL-save Base64 into id.
+    pub fn decode<I>(string: &String) -> Result<I, Error>
+        where I: Bytes
+    {
+        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut bytes = Vec::<u8>::new();
+        
+        for (i, c) in string.chars().enumerate() {
+            let byte = alphabet.find(c).ok_or_else(|| Error::new(format!("Invalid character")))? as u8;
+            match i % 4 {
+                0 => {
+                    bytes.push(byte);
+                },
+                1 => {
+                    let last = bytes.pop().unwrap();
+                    bytes.push(last | (byte << 6));
+                    bytes.push(byte >> 2);
+                },
+                2 => {
+                    let last = bytes.pop().unwrap();
+                    bytes.push(last | (byte << 4));
+                    bytes.push(byte >> 4);
+                },
+                3 => {
+                    let last = bytes.pop().unwrap();
+                    bytes.push(last | (byte << 2));
+                },
+                _ => unreachable!()
+            }
+        };
+        /*
+        if sextets.len() > 128 {
+            return Err(Error::new(format!("ID \"{}\" exceeds maximum length", id)));
+        }
+        for &sextet in &sextets {
+            output.push(alphabet.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
+        }
+        */
 
-    /// Creates an entry in the database.
-    pub fn create<T>(&self, object: &T) -> Result<(), Error>
-        where T: Store + SerializeBinary
-    {           
-        let key = format!("{}/{}", T::name(), Database::id(object.id())?);
+        bytes.reverse();
+        Ok(I::deserialize(&mut bytes))
+    }
+
+    pub fn exists<T>(&self, object: &T) -> Result<bool, Error>
+        where T: Store
+    {
+        let key = format!("{}/{}", T::name(), Database::encode(object.id())?);
+        let path = self.path.clone().join(&key);
+        Ok(path.exists())
+    }
+
+    fn next_id<T>(&self) -> <T as Auto>::Count
+        where T: Auto
+    {
+        let mut output = Default::default();
+        if let Ok(paths) = std::fs::read_dir(self.path.clone().join(T::name())) {
+            for path in paths {
+                let encoded = String::from(path.unwrap().path().into_iter().last().unwrap().to_str().unwrap());
+                let value = Database::decode::<<T as Auto>::Count>(&encoded).unwrap();
+                if value >= output {
+                    output = value.next();
+                }
+            }
+        }
+        output
+    }
+
+    fn create_id<T>(&self, object: &T, id: &T::Id) -> Result<(), Error>
+        where T: Store
+    {
+        let key = format!("{}/{}", T::name(), Database::encode(id)?);
         let path = self.path.clone().join(&key);
         let mut directory = path.clone();
         directory.pop();
@@ -121,8 +207,21 @@ impl Database {
         output
     }
 
+    pub fn create_auto<T>(&self, object: &T) -> Result<(), Error>
+        where T: Auto 
+    {
+        self.create_id(object, &self.next_id::<T>().into())
+    }
+    
+    /// Creates an entry in the database.
+    pub fn create<T>(&self, object: &T) -> Result<(), Error>
+        where T: Store
+    {
+        self.create_id(object, &object.id())
+    }
+
     fn read_encoded<T>(&self, encoded: String) -> Result<T, Error>
-        where T: Store + SerializeBinary
+        where T: Store
     {        
         let key = format!("{}/{}", T::name(), encoded);
         let path = self.path.clone().join(&key);
@@ -178,18 +277,18 @@ impl Database {
     }
 
     /// Reads an entry from the database.
-    pub fn read<T>(&self, id: &T::ID) -> Result<T, Error>
-        where T: Store + SerializeBinary
+    pub fn read<T>(&self, id: &T::Id) -> Result<T, Error>
+        where T: Store
     {        
-        self.read_encoded(Database::id(id)?)
+        self.read_encoded(Database::encode(id)?)
     }
 
     /// Reads all entries from the database
     pub fn read_all<T>(&self) -> Result<Vec<T>, Error>
-        where T: Store + SerializeBinary
+        where T: Store
     {
         let mut result = Vec::new();
-        match fs::read_dir(format!("data/{}", T::name())) {
+        match fs::read_dir(self.path.clone().join(T::name())) {
             Ok(paths) => for path in paths {
                 let encoded = String::from(path?.path().into_iter().last().unwrap().to_str().unwrap());
                 result.push(self.read_encoded(encoded)?);
@@ -202,9 +301,9 @@ impl Database {
     
     /// Updates an entry in the database.
     pub fn update<T>(&self, object: &T) -> Result<(), Error>
-        where T: Store + SerializeBinary
+        where T: Store
     {
-        let key = format!("{}/{}", T::name(), Database::id(object.id())?);
+        let key = format!("{}/{}", T::name(), Database::encode(object.id())?);
         let path = self.path.clone().join(&key);
         let mut directory = path.clone();
         directory.pop();
@@ -243,11 +342,23 @@ impl Database {
         output
     }
 
-    /// Deletes an entry from the database.
-    pub fn delete<T>(&self, id: &T::ID) -> Result<(), Error>
-        where T: Store + SerializeBinary
+    /// Tries to create an entry, updates it if it already exists
+    pub fn create_or_update<T>(&self, object: &T) -> Result<(), Error>
+        where T: Store
     {
-        let key = format!("{}/{}", T::name(), Database::id(id)?);
+        if self.exists(object)? {
+            self.update(object)?;
+        } else {
+            self.create(object)?;
+        }
+
+        Ok(())
+    }
+
+    fn delete_encoded<T>(&self, encoded: String) -> Result<(), Error>
+        where T: Store
+    {
+        let key = format!("{}/{}", T::name(), encoded);
         let path = self.path.clone().join(&key);
 
         // acquire lock
@@ -277,6 +388,29 @@ impl Database {
         condvar.notify_all();
 
         output
+    }
+
+    /// Deletes an entry from the database.
+    pub fn delete<T>(&self, id: &T::Id) -> Result<(), Error>
+        where T: Store
+    {
+        self.delete_encoded::<T>(Database::encode(id)?)
+    }
+
+    /// Delete all entries from the database
+    pub fn delete_all<T>(&self) -> Result<(), Error>
+        where T: Store
+    {
+        let mut result = Vec::new();
+        match fs::read_dir(self.path.clone().join(T::name())) {
+            Ok(paths) => for path in paths {
+                let encoded = String::from(path?.path().into_iter().last().unwrap().to_str().unwrap());
+                result.push(self.delete_encoded::<T>(encoded)?);
+            },
+            Err(_) => {}
+        }
+
+        Ok(())
     }
 
 }

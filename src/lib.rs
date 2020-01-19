@@ -1,16 +1,16 @@
 mod database;
-pub use crate::database::{Database, Store, SerializeBinary, Error};
+pub use crate::database::{Database, Store, Auto, Count, Bytes, Error};
 
 #[cfg(test)]
 mod tests {
-    use super::{Database, Store, SerializeBinary};
+    use super::{Database, Store, Bytes};
     use std::thread;
     use std::sync::Arc;
     use std::time::Instant;
 
-    #[derive(SerializeBinary, Store, Default, PartialEq, Debug)]
+    #[derive(Bytes, Store, PartialEq, Debug)]
     struct Person {
-        #[id] name: String,
+        #[store(id)] name: String,
         age: u16,
         text: String,
         vec: Vec::<u128>
@@ -27,15 +27,28 @@ mod tests {
         }
     }
 
-    #[derive(SerializeBinary, Store, Default)]
+    #[derive(Bytes, Store)]
     struct Number {
-        #[id] id: u32
+        #[store(id)] id: u32
     }
 
     impl Number {
         pub fn new(id: u32) -> Number {
             Number {
                 id
+            }
+        }
+    }
+
+    #[derive(Bytes, Store)]
+    struct AutoNumber {
+        #[store(id, auto)] id: u32
+    }
+
+    impl AutoNumber {
+        pub fn new() -> AutoNumber {
+            AutoNumber {
+                id: 0
             }
         }
     }
@@ -51,9 +64,28 @@ mod tests {
     }
     */
 
+    
     #[test]
-    fn crud_basics() {
-        let database = Database::new("data");
+    fn encode_decode() {
+        let id: u32 = 1234;
+        let encoded = Database::encode(&id).unwrap();
+        let decoded: u32 = Database::decode(&encoded).unwrap();
+        println!("{} -> {} -> {}", id, encoded, decoded);
+    }
+
+    #[test]
+    fn serialize_deserialize() {
+        let number: u32 = 1234;
+        let serialized = number.serialize();
+        let mut reversed = serialized.clone();
+        reversed.reverse();
+        let deserialized: u32 = Bytes::deserialize(&mut reversed);
+        println!("{} -> {:?} -> {}", number, serialized, deserialized);
+    }
+
+    #[test]
+    fn basics() {
+        let database = Database::new("data/basics");
         let mut peter_original = Person::new("Peter", 25);
         database.create(&peter_original).expect("Database create failed");
         let peter_read: Person = database.read(&String::from("Peter")).expect("Database read failed");
@@ -67,7 +99,7 @@ mod tests {
 
     #[test]
     fn read_all() {
-        let database = Database::new("data");
+        let database = Database::new("data/read-all");
         database.create(&Person::new("Jakob", 56)).unwrap();
         database.create(&Person::new("Maria", 54)).unwrap();
         database.create(&Person::new("Josef", 51)).unwrap();
@@ -75,6 +107,14 @@ mod tests {
         database.delete::<Person>(&String::from("Jakob")).unwrap();
         database.delete::<Person>(&String::from("Maria")).unwrap();
         database.delete::<Person>(&String::from("Josef")).unwrap();
+    }
+
+    #[test]
+    fn auto_count() {
+        let database = Database::new("data/auto-count");
+        database.create_auto(&AutoNumber::new()).unwrap();
+        database.create_auto(&AutoNumber::new()).unwrap();
+        database.create_auto(&AutoNumber::new()).unwrap();
     }
 
     /*
@@ -99,8 +139,8 @@ mod tests {
     
     
     #[test]
-    fn crud_thread_times() {
-        let database = Arc::new(Database::new("data"));
+    fn thread_times() {
+        let database = Arc::new(Database::new("data/thread-times"));
         for i in 0..6 {
             let amount = (2 as u32).pow(i);
             let repetitions = 128 as u32 / amount;
