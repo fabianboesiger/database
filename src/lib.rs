@@ -1,5 +1,5 @@
 mod database;
-pub use crate::database::{Database, Store, Auto, Count, Bytes, Error};
+pub use crate::database::{Database, Store, Count, Bytes, Error};
 
 #[cfg(test)]
 mod tests {
@@ -42,7 +42,7 @@ mod tests {
 
     #[derive(Bytes, Store)]
     struct AutoNumber {
-        #[store(id, auto)] id: u32
+        #[store(id)] id: u32
     }
 
     impl AutoNumber {

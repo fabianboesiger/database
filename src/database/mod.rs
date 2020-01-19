@@ -3,7 +3,7 @@ mod bytes;
 mod count;
 mod error;
 
-pub use store::{Store, Auto};
+pub use store::Store;
 pub use bytes::Bytes;
 pub use count::Count;
 pub use store_derive::Store;
@@ -148,14 +148,14 @@ impl Database {
         Ok(path.exists())
     }
 
-    fn next_id<T>(&self) -> <T as Auto>::Count
-        where T: Auto
+    fn next_id<T>(&self) -> T::Id
+        where T: Store, T::Id: Count
     {
         let mut output = Default::default();
         if let Ok(paths) = std::fs::read_dir(self.path.clone().join(T::name())) {
             for path in paths {
                 let encoded = String::from(path.unwrap().path().into_iter().last().unwrap().to_str().unwrap());
-                let value = Database::decode::<<T as Auto>::Count>(&encoded).unwrap();
+                let value = Database::decode::<T::Id>(&encoded).unwrap();
                 if value >= output {
                     output = value.next();
                 }
@@ -208,7 +208,7 @@ impl Database {
     }
 
     pub fn create_auto<T>(&self, object: &T) -> Result<(), Error>
-        where T: Auto 
+        where T: Store, T::Id: Count
     {
         self.create_id(object, &self.next_id::<T>().into())
     }

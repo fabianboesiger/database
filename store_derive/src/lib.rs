@@ -31,13 +31,12 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
     let struct_name = &ast.ident;
     // find id name and type
 
-    let (id_name, id_type, id_auto) = match *&ast.data {
+    let (id_name, id_type) = match *&ast.data {
         Data::Struct(ref data) => {
             match data.fields {
                 Fields::Named(ref fields) => {
                     let mut id_name = Option::None;
                     let mut id_type = Option::None;
-                    let mut id_auto = false;
                     for field in &fields.named {
                         let nested = 
                             if let Meta::List(meta_list) = 
@@ -60,16 +59,11 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
                                 if contains_name(&nested, "id") {
                                     id_name = Some(field_name);
                                     id_type = Some(&tp.path);
-                                    
-                                    if contains_name(&nested, "auto") {
-                                        id_auto = true;
-                                    }
-                                    
                                 }
                             }
                         }
                     }
-                    (id_name, id_type, id_auto)
+                    (id_name, id_type)
                 },
                 Fields::Unnamed(_) => unimplemented!(),
                 Fields::Unit => unimplemented!()
@@ -103,39 +97,18 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
             .collect::<String>()
     );
     // generate implementation
-    let gen = if !id_auto {
-        quote! {
-            impl Store for #struct_name {
-                type Id = #id_type;
+    let gen = quote! {
+        impl Store for #struct_name {
+            type Id = #id_type;
 
-                fn name() -> &'static str {
-                    #name
-                }
-                
-                fn id(&self) -> &#id_type {
-                    &self.#id_name
-                }
+            fn name() -> &'static str {
+                #name
             }
-        }
-    } else {
-        quote! {
-            impl Store for #struct_name {
-                type Id = #id_type;
-
-                fn name() -> &'static str {
-                    #name
-                }
-                
-                fn id(&self) -> &#id_type {
-                    &self.#id_name
-                }
-            }
-
-            impl crate::Auto for #struct_name {
-                type Count = #id_type;
+            
+            fn id(&self) -> &#id_type {
+                &self.#id_name
             }
         }
     };
-
     gen.into()
 }
