@@ -4,15 +4,14 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn;
 use syn::{Data, Fields, Type, Meta, NestedMeta};
-use syn::punctuated::Punctuated;
-use syn::token::Comma;
 
-#[proc_macro_derive(Store, attributes(store))]
+#[proc_macro_derive(Store, attributes(id, rename))]
 pub fn store_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_store(&ast)
 }
 
+/*
 fn contains_name(nested: &Punctuated<NestedMeta, Comma>, name: &str) -> bool {
     for nested_meta in nested.clone() {
         if let NestedMeta::Meta(meta) = nested_meta {
@@ -25,11 +24,59 @@ fn contains_name(nested: &Punctuated<NestedMeta, Comma>, name: &str) -> bool {
     }
     false
 }
+*/
 
 fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
-    // find struct name
     let struct_name = &ast.ident;
-    // find id name and type
+
+    let nested = 
+        if let Some(Meta::List(meta_list)) = 
+            if let Some(some) = &ast.attrs
+                .clone()
+                .into_iter()
+                .filter(|attr| attr.path.is_ident("rename"))
+                .nth(0)
+            {
+                Some(some
+                    .parse_meta()
+                    .unwrap())
+            } else {
+                None
+            }
+        { Some(meta_list.nested) } else { None };
+
+    /*
+    let from = Vec::new();
+
+    for nested_meta in nested {
+        if let NestedMeta::Meta(meta) = nested_meta {
+            if let Meta::Path(path) = meta {
+                from.push(path);
+            } 
+        }
+    }
+    */
+
+    let new_name = if let Some(nested) = nested {
+        let mut from = Vec::new();
+
+        for nested_meta in nested {
+            if let NestedMeta::Meta(meta) = nested_meta {
+                if let Meta::Path(path) = meta {
+                    from.push(path);
+                } 
+            }
+        }
+
+        if let Some(new_name) = from.into_iter().nth(0) {
+            Some(new_name.get_ident().unwrap().to_string())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    
 
     let (id_name, id_type) = match *&ast.data {
         Data::Struct(ref data) => {
@@ -38,6 +85,20 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
                     let mut id_name = Option::None;
                     let mut id_type = Option::None;
                     for field in &fields.named {
+                        if let Some(_) = field.attrs
+                            .clone()
+                            .into_iter()
+                            .filter(|attr| attr.path.is_ident("id"))
+                            .nth(0)
+                        {
+                            if let Some(field_name) = &field.ident {
+                                if let Type::Path(tp) =  &field.ty {
+                                    id_name = Some(field_name);
+                                    id_type = Some(&tp.path);
+                                }
+                            }
+                        }
+                        /*
                         let nested = 
                             if let Meta::List(meta_list) = 
                                 if let Some(some) = field.attrs
@@ -62,6 +123,7 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
                                 }
                             }
                         }
+                        */
                     }
                     (id_name, id_type)
                 },
@@ -72,7 +134,6 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
         Data::Enum(_) | Data::Union(_) => unimplemented!()
     };
 
-    // currently, an id attribute has to exist
     if id_name == Option::None {
         panic!("Storable structs without id are not allowed");
     }
@@ -82,7 +143,7 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
         panic!("Name exceeds maximum length.");
     }
     let name = format!("{}s", 
-        name
+        if let Some(new_name) = new_name { new_name } else { name }
             .chars()
             .enumerate()
             .map(|(i, c)| {
@@ -96,14 +157,12 @@ fn impl_store(ast: &syn::DeriveInput) -> TokenStream {
             .flatten()
             .collect::<String>()
     );
-    // generate implementation
+
     let gen = quote! {
         impl Store for #struct_name {
             type Id = #id_type;
 
-            fn name() -> &'static str {
-                #name
-            }
+            const NAME: &'static str = #name;
             
             fn id(&self) -> &#id_type {
                 &self.#id_name

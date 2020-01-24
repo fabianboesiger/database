@@ -1,6 +1,16 @@
+use super::Error;
+
+/// The `Bytes` trait has to be implemented in order to use the `Store` trait.
 pub trait Bytes {
     fn serialize(&self) -> Vec<u8>;
-    fn deserialize(_: &mut Vec<u8>) -> Self;
+    fn deserialize(_: &mut Vec<u8>) -> Result<Self, Error> where Self: Sized;
+    // TODO: Move signature computation to compile time.
+    fn signature() -> String;
+    fn hash() -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hasher::write(&mut hasher, Self::signature().as_bytes());
+        std::hash::Hasher::finish(&hasher)
+    }
 }
 
 macro_rules! impl_SerializeBinary_for_primitives {
@@ -13,14 +23,18 @@ macro_rules! impl_SerializeBinary_for_primitives {
                     bytes
                 }
 
-                fn deserialize(bytes: &mut Vec<u8>) -> $t {
+                fn deserialize(bytes: &mut Vec<u8>) -> Result<$t, Error> {
                     const SIZE: usize = std::mem::size_of::<$t>();
                     let mut my_bytes = [0; SIZE];
                     for i in 0..SIZE {
                         let byte = bytes.pop().unwrap();
                         my_bytes[i] = byte;
                     }
-                    <$t>::from_le_bytes(my_bytes)
+                    Ok(<$t>::from_le_bytes(my_bytes))
+                }
+
+                fn signature() -> String {
+                    String::from(stringify!($t))
                 }
             }
         )*
@@ -36,8 +50,12 @@ impl Bytes for bool {
         bytes
     }
 
-    fn deserialize(bytes: &mut Vec<u8>) -> bool {
-        bytes.pop().unwrap() == 1
+    fn deserialize(bytes: &mut Vec<u8>) -> Result<bool, Error> {
+        Ok(bytes.pop().unwrap() == 1)
+    }
+
+    fn signature() -> String {
+        String::from("bool")
     }
 }
 
@@ -51,13 +69,17 @@ impl<S: Bytes> Bytes for Vec<S> {
         bytes
     }
 
-    fn deserialize(bytes: &mut Vec<u8>) -> Vec<S> {
+    fn deserialize(bytes: &mut Vec<u8>) -> Result<Vec<S>, Error> {
         let mut output = Vec::new();
-        let size = u64::deserialize(bytes);
+        let size = u64::deserialize(bytes)?;
         for _ in 0..size {
-            output.push(S::deserialize(bytes));
+            output.push(S::deserialize(bytes)?);
         }
-        output
+        Ok(output)
+    }
+
+    fn signature() -> String {
+        format!("Vec<{}>", S::signature())
     }
 }
 
@@ -68,7 +90,7 @@ impl Bytes for String {
         bytes
     }
 
-    fn deserialize(bytes: &mut Vec<u8>) -> String {
+    fn deserialize(bytes: &mut Vec<u8>) -> Result<String, Error> {
         let mut my_bytes = Vec::new();
         loop {
             match bytes.pop() {
@@ -81,6 +103,10 @@ impl Bytes for String {
                 None => { break; }
             }
         }
-        String::from(std::str::from_utf8(&my_bytes).unwrap())
+        Ok(String::from(std::str::from_utf8(&my_bytes).unwrap()))
+    }
+
+    fn signature() -> String {
+        String::from("String")
     }
 }

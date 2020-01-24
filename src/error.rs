@@ -1,5 +1,6 @@
 use std::{fmt, io, error};
 
+/// Used to propagate database errors.
 #[derive(Debug)]
 pub struct Error {
     description: String

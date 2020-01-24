@@ -1,3 +1,5 @@
+/// This trait can be used on id's that should be automatically generated.
+/// Both unsigned and signed integers implement this trait.
 pub trait Count: std::cmp::PartialOrd + Default {
     fn next(&self) -> Self;
 }

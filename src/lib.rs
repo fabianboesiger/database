@@ -1,5 +1,16 @@
 mod database;
-pub use crate::database::{Database, Store, Count, Bytes, Error};
+mod store;
+mod bytes;
+mod count;
+mod error;
+
+pub use crate::database::Database;
+pub use store::Store;
+pub use bytes::Bytes;
+pub use count::Count;
+pub use error::Error;
+pub use store_derive::Store;
+pub use bytes_derive::Bytes;
 
 #[cfg(test)]
 mod tests {
@@ -8,28 +19,52 @@ mod tests {
     use std::sync::Arc;
     use std::time::Instant;
 
-    #[derive(Bytes, Store, PartialEq, Debug)]
+    #[derive(Bytes, Store, PartialEq, Debug, Clone)]
+    #[from(Person2)]
     struct Person {
-        #[store(id)] name: String,
+        #[id] name: String,
         age: u16,
-        text: String,
-        vec: Vec::<u128>
+    }
+
+    impl From<Person2> for Person {
+        fn from(person2: Person2) -> Person {
+            Person {
+                name: person2.name,
+                age: person2.age
+            }
+        }
+    }
+
+    #[derive(Bytes, Store, PartialEq, Debug)]
+    #[rename(Person)]
+    struct Person2 {
+        #[id] name: String,
+        age: u16,
+        text: String
+    }
+    
+    impl From<Person> for Person2 {
+        fn from(person: Person) -> Person2 {
+            Person2 {
+                name: person.name,
+                age: person.age,
+                text: String::new()
+            }
+        }
     }
     
     impl Person {
         pub fn new(name: &'static str, age: u16) -> Person {
             Person {
                 name: String::from(name),
-                age,
-                text: String::from("Hello\n\tWorld!"),
-                vec: Vec::new()
+                age
             }
         }
     }
 
     #[derive(Bytes, Store)]
     struct Number {
-        #[store(id)] id: u32
+        #[id] id: u32
     }
 
     impl Number {
@@ -42,7 +77,7 @@ mod tests {
 
     #[derive(Bytes, Store)]
     struct AutoNumber {
-        #[store(id)] id: u32
+        #[id] id: u32
     }
 
     impl AutoNumber {
@@ -52,19 +87,7 @@ mod tests {
             }
         }
     }
-
     /*
-    #[test]
-    fn lock_after_read() {
-        let database = Database::new();
-        Person::read(String::from("Something"), &database).expect_err("No error recieved");
-        let peter = Person::new("Hans", 42);
-        peter.create(&database).expect("Database create failed");
-        Person::delete(String::from("Hans"), &database).expect("Database delete failed");
-    }
-    */
-
-    
     #[test]
     fn encode_decode() {
         let id: u32 = 1234;
@@ -72,14 +95,14 @@ mod tests {
         let decoded: u32 = Database::decode(&encoded).unwrap();
         println!("{} -> {} -> {}", id, encoded, decoded);
     }
-
+    */
     #[test]
     fn serialize_deserialize() {
         let number: u32 = 1234;
         let serialized = number.serialize();
         let mut reversed = serialized.clone();
         reversed.reverse();
-        let deserialized: u32 = Bytes::deserialize(&mut reversed);
+        let deserialized: u32 = Bytes::deserialize(&mut reversed).unwrap();
         println!("{} -> {:?} -> {}", number, serialized, deserialized);
     }
 
@@ -98,15 +121,24 @@ mod tests {
     }
 
     #[test]
+    fn from_old() {
+        let database = Database::new("data/from-old");
+        let peter: Person = Person::new("Peter", 25);
+        let peter2: Person2 = peter.clone().into();
+        database.create(&peter2).expect("Database create failed");
+        let peter_read: Person = database.read(&String::from("Peter")).expect("Database read failed");
+        assert_eq!(peter_read, peter);
+        database.delete::<Person>(&String::from("Peter")).expect("Database delete failed");
+    }
+
+    #[test]
     fn read_all() {
         let database = Database::new("data/read-all");
         database.create(&Person::new("Jakob", 56)).unwrap();
         database.create(&Person::new("Maria", 54)).unwrap();
         database.create(&Person::new("Josef", 51)).unwrap();
         assert_eq!(database.read_all::<Person>().unwrap().len(), 3);
-        database.delete::<Person>(&String::from("Jakob")).unwrap();
-        database.delete::<Person>(&String::from("Maria")).unwrap();
-        database.delete::<Person>(&String::from("Josef")).unwrap();
+        database.delete_all::<Person>().unwrap();
     }
 
     #[test]
@@ -116,41 +148,21 @@ mod tests {
         database.create_auto(&AutoNumber::new()).unwrap();
         database.create_auto(&AutoNumber::new()).unwrap();
     }
-
-    /*
-    #[test]
-    fn crud_async() {
-        executor::block_on(async {
-            let database = Database::new();
-            let mut peter_original = Person::new("Peter", 25);
-            println!("{}", peter_original);
-            database.create(&peter_original).await.expect("Database create failed");
-            let mut peter_read = Person::new("Not Peter", 0);
-            database.read(&mut peter_read).await.expect("Database read failed");
-            assert_eq!(peter_read, peter_original);
-            peter_original.age = 42;
-            database.update(&peter_original).await.expect("Database update failed");
-            database.read(&mut peter_read).await.expect("Database read failed");
-            assert_eq!(peter_read, peter_original);
-            database.delete(&peter_original).await.expect("Database delete failed");
-        });
-    }
-    */
-    
     
     #[test]
     fn thread_times() {
         let database = Arc::new(Database::new("data/thread-times"));
         for i in 0..6 {
-            let amount = (2 as u32).pow(i);
-            let repetitions = 128 as u32 / amount;
+            let threads = (2 as u32).pow(i);
+            let workload = 128 as u32 / threads;
             let start = Instant::now();
             let mut join_handles = Vec::new();
-            for j in 0..amount {
+            for j in 0..threads {
                 let db = Arc::clone(&database);
                 join_handles.push(thread::spawn(move || {
-                    for k in 0..repetitions {
-                        let mut number = Number::new(j as u32 * repetitions + k as u32);
+                    for k in 0..workload {
+                        let num = j as u32 * workload + k as u32;
+                        let mut number = Number::new(num);
                         db.create(&number).expect("Database create failed");
                         number = db.read(&number.id).expect("Database read failed");
                         db.update(&number).expect("Database update failed");
@@ -161,7 +173,7 @@ mod tests {
             for join_handle in join_handles {
                 join_handle.join().unwrap();
             }
-            println!("{} threads: {} ms", amount, start.elapsed().as_millis());
+            println!("{} threads: {} ms", threads, start.elapsed().as_millis());
         }
     }
     

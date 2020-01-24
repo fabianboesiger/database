@@ -1,14 +1,4 @@
-mod store;
-mod bytes;
-mod count;
-mod error;
-
-pub use store::Store;
-pub use bytes::Bytes;
-pub use count::Count;
-pub use store_derive::Store;
-pub use bytes_derive::Bytes;
-pub use error::Error;
+use super::{Error, Bytes, Store, Count};
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::fs::File;
@@ -17,6 +7,9 @@ use std::io::prelude::*;
 use std::sync::Mutex;
 use std::sync::Condvar;
 use std::collections::HashMap;
+
+//const BASE: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const BASE: &'static str = "0123456789abcdef";
 
 #[derive(Debug)]
 enum Operation {
@@ -40,30 +33,10 @@ impl Database {
             blocked: Default::default()
         }
     }
-    
     /*
-    fn next_id<T, I: Bytes + Count + Default>(&self) -> I
-        where T: Store
-    {
-        let mut output = Default::default();
-        if let Ok(paths) = std::fs::read_dir(self.path.clone().join(T::name())) {
-            for path in paths {
-                let encoded = String::from(path.unwrap().path().into_iter().last().unwrap().to_str().unwrap());
-                let value = Database::decode::<I>(&encoded).unwrap();
-                if value >= output {
-                    output = value.next();
-                }
-            }
-        }
-        output
-    }
-    */
-    
-    /// Encode id into URL-save Base64.
-    pub fn encode<I>(id: &I) -> Result<String, Error>
+    fn encode<I>(id: &I) -> Result<String, Error>
         where I: Bytes
     {
-        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut output = String::new();
         let mut sextets = Vec::<u8>::new();
         let bytes = id.serialize();
@@ -91,21 +64,19 @@ impl Database {
             return Err(Error::new(format!("Id exceeds maximum length")));
         }
         for &sextet in &sextets {
-            output.push(alphabet.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
+            output.push(BASE.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
         }
 
         Ok(output)
     }
     
-    /// Decode URL-save Base64 into id.
-    pub fn decode<I>(string: &String) -> Result<I, Error>
+    fn decode<I>(string: &String) -> Result<I, Error>
         where I: Bytes
     {
-        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut bytes = Vec::<u8>::new();
         
         for (i, c) in string.chars().enumerate() {
-            let byte = alphabet.find(c).ok_or_else(|| Error::new(format!("Invalid character")))? as u8;
+            let byte = BASE.find(c).ok_or_else(|| Error::new(format!("Invalid character")))? as u8;
             match i % 4 {
                 0 => {
                     bytes.push(byte);
@@ -127,23 +98,63 @@ impl Database {
                 _ => unreachable!()
             }
         };
-        /*
-        if sextets.len() > 128 {
-            return Err(Error::new(format!("ID \"{}\" exceeds maximum length", id)));
-        }
-        for &sextet in &sextets {
-            output.push(alphabet.chars().skip(sextet as usize).next().expect("Alphabet out of range"));
-        }
-        */
 
         bytes.reverse();
-        Ok(I::deserialize(&mut bytes))
+        Ok(I::deserialize(&mut bytes)?)
+    }
+    */
+
+    fn encode<I>(id: &I) -> Result<String, Error>
+        where I: Bytes
+    {
+        let mut output = String::new();
+        let bytes = id.serialize();
+        
+        for byte in &bytes {
+            output.push(BASE.chars().nth((byte / BASE.len() as u8) as usize).unwrap());
+            output.push(BASE.chars().nth((byte % BASE.len() as u8) as usize).unwrap());
+
+            if output.len() > 128 {
+                return Err(Error::new(format!("Id is too long.")));
+            }
+        }
+
+        if output.len() == 0 {
+            return Err(Error::new(format!("Id is too short.")));
+        }
+
+        Ok(output)
+    }
+    
+    fn decode<I>(string: &String) -> Result<I, Error>
+        where I: Bytes
+    {
+        let mut bytes = Vec::<u8>::new();
+        let mut chars = string.chars();
+
+        loop {
+            let c1 = if let Some(c) = chars.next() {
+                c
+            } else {
+                break
+            };
+            let c2 = chars.next().ok_or_else(|| Error::new(format!("Invalid entry name.")))?;
+
+            let b1 = BASE.find(c1).ok_or_else(|| Error::new(format!("Invalid character in entry name.")))? as u8;
+            let b2 = BASE.find(c2).ok_or_else(|| Error::new(format!("Invalid character in entry name.")))? as u8;
+        
+            bytes.push(b1 * 16 + b2);
+        }
+
+        bytes.reverse();
+
+        Ok(I::deserialize(&mut bytes)?)
     }
 
     pub fn exists<T>(&self, object: &T) -> Result<bool, Error>
         where T: Store
     {
-        let key = format!("{}/{}", T::name(), Database::encode(object.id())?);
+        let key = format!("{}/{}", T::NAME, Database::encode(object.id())?);
         let path = self.path.clone().join(&key);
         Ok(path.exists())
     }
@@ -152,7 +163,7 @@ impl Database {
         where T: Store, T::Id: Count
     {
         let mut output = Default::default();
-        if let Ok(paths) = std::fs::read_dir(self.path.clone().join(T::name())) {
+        if let Ok(paths) = std::fs::read_dir(self.path.clone().join(T::NAME)) {
             for path in paths {
                 let encoded = String::from(path.unwrap().path().into_iter().last().unwrap().to_str().unwrap());
                 let value = Database::decode::<T::Id>(&encoded).unwrap();
@@ -167,28 +178,28 @@ impl Database {
     fn create_id<T>(&self, object: &T, id: &T::Id) -> Result<(), Error>
         where T: Store
     {
-        let key = format!("{}/{}", T::name(), Database::encode(id)?);
+        let key = format!("{}/{}", T::NAME, Database::encode(id)?);
         let path = self.path.clone().join(&key);
         let mut directory = path.clone();
         directory.pop();
 
-        // acquire lock
+        // Acquire lock.
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
 
-        // wait while key is blocked
+        // Wait while key is blocked.
         while (*guard).get(&key).is_some() {
             guard = condvar.wait(guard).unwrap();
         }
-        // if key isn't locked, insert it into the locked set and release lock
+        // If key isn't locked, insert it into the locked set and release lock.
         guard.insert(key.clone(), Operation::Write);
         drop(guard);
 
         let output = (|| if path.exists() {
-            // return error if file exists
+            // Return error if file exists.
             Err(Error::new(format!("Entry \"{}\" already exists", key)))
         } else {
-            // do the create
+            // Do the create.
             if !directory.exists() {
                 fs::create_dir_all(directory)?;
             }
@@ -198,7 +209,7 @@ impl Database {
             Ok(())
         })();
 
-        // acquire lock again and remove key from blocked list
+        // Acquire lock again and remove key from blocked list
         let mut guard = lock.lock().unwrap();
         guard.remove(&key);
         drop(guard);
@@ -223,14 +234,14 @@ impl Database {
     fn read_encoded<T>(&self, encoded: String) -> Result<T, Error>
         where T: Store
     {        
-        let key = format!("{}/{}", T::name(), encoded);
+        let key = format!("{}/{}", T::NAME, encoded);
         let path = self.path.clone().join(&key);
 
-        // acquire lock
+        // Acquire lock.
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
 
-        // wait while key is blocked
+        // Wait while key is blocked.
         let mut readers = 0;
         while match (*guard).get(&key) {
             Some(operation) => match operation {
@@ -244,19 +255,19 @@ impl Database {
         } {
             guard = condvar.wait(guard).unwrap();
         }
-        // if key isn't locked, insert it into the locked set and release lock
+        // If key isn't locked, insert it into the locked set and release lock.
         guard.insert(key.clone(), Operation::Read(readers + 1));
         drop(guard);
 
         let output = (|| if !path.exists() {
-            // return error if file doesn't exist
+            // Return error if file doesn't exist.
             Err(Error::new(format!("Entry \"{}\" doesn't exist", key)))
         } else {
-            // do the read
-            Ok(T::deserialize(&mut fs::read(path)?))
+            // Do the read
+            Ok(T::deserialize(&mut fs::read(path)?)?)
         })();
         
-        // acquire lock again and decrease readers
+        // Acquire lock again and decrease readers.
         let mut guard = lock.lock().unwrap();
         let updated_readers = match (*guard).get(&key) {
             Some(operation) => match operation {
@@ -283,12 +294,12 @@ impl Database {
         self.read_encoded(Database::encode(id)?)
     }
 
-    /// Reads all entries from the database
+    /// Reads all entries from the database.
     pub fn read_all<T>(&self) -> Result<Vec<T>, Error>
         where T: Store
     {
         let mut result = Vec::new();
-        match fs::read_dir(self.path.clone().join(T::name())) {
+        match fs::read_dir(self.path.clone().join(T::NAME)) {
             Ok(paths) => for path in paths {
                 let encoded = String::from(path?.path().into_iter().last().unwrap().to_str().unwrap());
                 result.push(self.read_encoded(encoded)?);
@@ -303,27 +314,27 @@ impl Database {
     pub fn update<T>(&self, object: &T) -> Result<(), Error>
         where T: Store
     {
-        let key = format!("{}/{}", T::name(), Database::encode(object.id())?);
+        let key = format!("{}/{}", T::NAME, Database::encode(object.id())?);
         let path = self.path.clone().join(&key);
         let mut directory = path.clone();
         directory.pop();
 
-        // acquire lock
+        // Acquire lock.
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
-        // wait while key is blocked
+        // Wait while key is blocked.
         while (*guard).get(&key).is_some() {
             guard = condvar.wait(guard).unwrap();
         }
-        // if key isn't locked, insert it into the locked set and release lock
+        // If key isn't locked, insert it into the locked set and release lock.
         guard.insert(key.clone(), Operation::Write);
         drop(guard);
 
         let output = (|| if !path.exists() {
-            // return error if file doesn't exist
+            // Return error if file doesn't exist.
             Err(Error::new(format!("Entry \"{}\" doesn't exist", key)))
         } else {
-            // do the update
+            // Do the update.
             if !directory.exists() {
                 fs::create_dir_all(directory)?;
             }
@@ -333,7 +344,7 @@ impl Database {
             Ok(())
         })();
 
-        // acquire lock again and remove key from blocked list
+        // Acquire lock again and remove key from blocked list.
         let mut guard = lock.lock().unwrap();
         guard.remove(&key);
         drop(guard);
@@ -342,7 +353,7 @@ impl Database {
         output
     }
 
-    /// Tries to create an entry, updates it if it already exists
+    /// Tries to create an entry, updates it if it already exists.
     pub fn create_or_update<T>(&self, object: &T) -> Result<(), Error>
         where T: Store
     {
@@ -358,30 +369,30 @@ impl Database {
     fn delete_encoded<T>(&self, encoded: String) -> Result<(), Error>
         where T: Store
     {
-        let key = format!("{}/{}", T::name(), encoded);
+        let key = format!("{}/{}", T::NAME, encoded);
         let path = self.path.clone().join(&key);
 
-        // acquire lock
+        // Acquire lock.
         let (lock, condvar) = &self.blocked;
         let mut guard = lock.lock().unwrap();
-        // wait while key is blocked
+        // Wait while key is blocked.
         while (*guard).get(&key).is_some() {
             guard = condvar.wait(guard).unwrap();
         }
-        // if key isn't locked, insert it into the locked set and release lock
+        // If key isn't locked, insert it into the locked set and release lock.
         guard.insert(key.clone(), Operation::Write);
         drop(guard);
 
         let output = (|| if !path.exists() {
-            // return error if file doesn't exist
+            // Return error if file doesn't exist.
             Err(Error::new(format!("Entry \"{}\" doesn't exist", key)))
         } else {
-            // do the delete
+            // Do the delete.
             fs::remove_file(path)?;
             Ok(())
         })();
 
-        // acquire lock again and remove key from blocked list
+        // Acquire lock again and remove key from blocked list.
         let mut guard = lock.lock().unwrap();
         guard.remove(&key);
         drop(guard);
@@ -402,7 +413,7 @@ impl Database {
         where T: Store
     {
         let mut result = Vec::new();
-        match fs::read_dir(self.path.clone().join(T::name())) {
+        match fs::read_dir(self.path.clone().join(T::NAME)) {
             Ok(paths) => for path in paths {
                 let encoded = String::from(path?.path().into_iter().last().unwrap().to_str().unwrap());
                 result.push(self.delete_encoded::<T>(encoded)?);
