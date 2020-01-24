@@ -1,4 +1,7 @@
 use super::Error;
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::cmp::Eq;
 
 /// The `Bytes` trait has to be implemented in order to use the `Store` trait.
 pub trait Bytes {
@@ -83,6 +86,23 @@ impl<S: Bytes> Bytes for Vec<S> {
     }
 }
 
+impl<A: Bytes, B: Bytes> Bytes for (A, B) {
+    fn serialize(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.append(&mut self.0.serialize());
+        bytes.append(&mut self.1.serialize());
+        bytes
+    }
+
+    fn deserialize(mut bytes: &mut Vec<u8>) -> Result<(A, B), Error> {        
+        Ok((A::deserialize(&mut bytes)?, B::deserialize(&mut bytes)?))
+    }
+
+    fn signature() -> String {
+        format!("({},{})", A::signature(), B::signature())
+    }
+}
+
 impl Bytes for String {
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -108,5 +128,19 @@ impl Bytes for String {
 
     fn signature() -> String {
         String::from("String")
+    }
+}
+
+impl<K: Bytes + Hash + Eq + Copy, V: Bytes + Copy> Bytes for HashMap<K, V> {
+    fn serialize(&self) -> Vec<u8> {
+        self.clone().drain().collect::<Vec<(K, V)>>().serialize()
+    }
+
+    fn deserialize(mut bytes: &mut Vec<u8>) -> Result<HashMap<K, V>, Error> {        
+        Ok(Vec::<(K, V)>::deserialize(&mut bytes)?.into_iter().collect::<HashMap<K, V>>())
+    }
+
+    fn signature() -> String {
+        format!("HashMap<{},{}>", K::signature(), V::signature())
     }
 }
